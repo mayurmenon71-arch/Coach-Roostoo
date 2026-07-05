@@ -11,6 +11,10 @@
   const FEATURES = ['RSI', 'ATR', 'VWAP', 'MACD', 'StochRSI', 'EMA-X', 'Bollinger', 'OBV', 'Hour', 'Weekday', 'Day', 'Month'];
 
   // Branded agent avatars — the identity carried through the build → launch flow.
+  // NOTE: this constant was missing entirely, which made avatarSrc() throw and
+  // silently killed every full rerender() — the page fell back to the static
+  // HTML and only partial refreshes (refreshRoster etc.) ever painted.
+  const AGENT_AVATARS = ['agent-orange'];
   function avatarSrc(i) {
     const n = AGENT_AVATARS.length;
     return 'assets/brand/agents/' + AGENT_AVATARS[((i % n) + n) % n] + '.png';
@@ -939,7 +943,8 @@
       const sym = el.dataset.sym;
       state.roster.push(sym);
       state.status[sym] = 'idle';
-      state.addOpen = false;
+      // keep the picker open so several assets can be added in a row —
+      // each one appears in the roster list immediately
       state.active = sym;
       if (replay) { replay.destroy(); replay = null; }
       rerender(false);
