@@ -26,9 +26,11 @@
     status: {},             // sym -> 'idle'|'stream'|'play'|'done'
     addOpen: false,
     chat: [],
-    chatOpen: true,
+    chatOpen: false,
     chatBusy: false,
     suggestIdx: 0,
+    topicScores: {},        // topic -> weight, decays each question — drives adaptive suggestions
+    asked: {},              // question text -> true, so we never re-suggest something already asked
     theme: 'dark',
     risk: { sl: 15, slOn: true, tp: 40, tpOn: true, maxT: 25, maxOn: true, minT: 5, minOn: false },
     accepted: false,
@@ -173,11 +175,89 @@
     'What is PPO?',
     'How do I read the learning curve?'
   ];
-  function suggestRowHtml() {
+  // Adaptive recommendations — each user question is classified into topics;
+  // scores decay over time so suggestions follow the user's current line of
+  // questioning and recommend a natural next question in that thread.
+  const TOPIC_FOLLOWUPS = {
+    frequency: [
+      'Which frequency suits volatile assets?',
+      'Do more frequent decisions mean more fees?',
+      'Why does one frequency apply to all assets?'
+    ],
+    reward: [
+      'When is Sortino better than Sharpe?',
+      'How does Calmar handle drawdowns?',
+      'Which reward fits my current roster?'
+    ],
+    indicators: [
+      'Which indicators matter most for momentum?',
+      'Is it better to use fewer indicators?',
+      'What do the calendar features add?'
+    ],
+    training: [
+      'Is 350k steps always better than 250k?',
+      'How do training steps affect the grade?',
+      'What are signs of undertraining?'
+    ],
+    grade: [
+      'How can I raise my grade to an A?',
+      'Why does my agent lose to buy and hold?',
+      'What is a healthy max drawdown?'
+    ],
+    ppo: [
+      'How do I read the learning curve?',
+      'What does the clip setting in UPDATE mean?',
+      'Why does the policy update every episode?'
+    ],
+    platform: [
+      'How are competition payouts split?',
+      'What do the Pro and Elite tiers require?',
+      'How does XP differ from tiers?'
+    ],
+    strategy: [
+      'Tune it for volatile markets',
+      'Set me up something safe and steady',
+      'How should I balance risk and drawdown?'
+    ]
+  };
+  function detectTopics(q) {
+    const s = q.toLowerCase(), t = [];
+    if (/(frequen|\b1m\b|\b5m\b|\b15m\b|minute)/.test(s)) t.push('frequency');
+    if (/(reward|sharpe|sortino|calmar)/.test(s)) t.push('reward');
+    if (/(indicator|feature|rsi|macd|vwap|atr|bollinger|obv|stochrsi|ema|signal)/.test(s)) t.push('indicators');
+    if (/(training|steps|\b(250|300|350)k\b)/.test(s)) t.push('training');
+    if (/(grade|verdict|score|converge|drawdown|win rate)/.test(s)) t.push('grade');
+    if (/(ppo|algorithm|policy|learning curve|episode|clip)/.test(s)) t.push('ppo');
+    if (/(competition|fee|payout|prize|wallet|tier|\bxp\b|bonus|enroll)/.test(s)) t.push('platform');
+    if (/(volatile|risky|risk|safe|steady|conservative|aggressive|strategy|tune)/.test(s)) t.push('strategy');
+    return t;
+  }
+  function recommendedQuestions() {
+    const ranked = Object.keys(state.topicScores)
+      .filter(t => state.topicScores[t] > 0.3 && TOPIC_FOLLOWUPS[t])
+      .sort((a, b) => state.topicScores[b] - state.topicScores[a]);
+    const picks = [];
+    // up to two follow-ups from the topics the user has been asking about most
+    ranked.forEach(topic => {
+      if (picks.length >= 2) return;
+      const qs = TOPIC_FOLLOWUPS[topic];
+      for (let k = 0; k < qs.length; k++) {
+        if (!state.asked[qs[k]] && picks.indexOf(qs[k]) < 0) { picks.push(qs[k]); break; }
+      }
+    });
+    // fill the rest from the rotating general pool
     const n = SUGGEST_POOL.length;
-    const i = ((state.suggestIdx % n) + n) % n;
-    const picks = [SUGGEST_POOL[i], SUGGEST_POOL[(i + 1) % n], SUGGEST_POOL[(i + 2) % n]];
-    return '<div class="chatSuggest" id="chatSuggest"><span class="suggLbl">Try asking</span>' +
+    let i = ((state.suggestIdx % n) + n) % n, guard = n;
+    while (picks.length < 3 && guard-- > 0) {
+      const q = SUGGEST_POOL[i % n]; i++;
+      if (!state.asked[q] && picks.indexOf(q) < 0) picks.push(q);
+    }
+    return picks;
+  }
+  function suggestRowHtml() {
+    const picks = recommendedQuestions();
+    const adaptive = Object.keys(state.topicScores).some(t => state.topicScores[t] > 0.3);
+    return '<div class="chatSuggest" id="chatSuggest"><span class="suggLbl">' + (adaptive ? 'Recommended for you' : 'Try asking') + '</span>' +
       picks.map(c => '<button class="chipQ" data-act="chat-chip" data-q="' + c + '">' + c + '</button>').join('') +
       '</div>';
   }
@@ -189,11 +269,12 @@
     return '<br><button class="chatApply" data-act="chat-apply" data-v=\'' + JSON.stringify(patch) + '\'>⚑ ' + label + '</button>';
   }
   function chatDockHtml() {
-    return '<div class="chatDock' + (state.chatOpen ? '' : ' closed') + '" id="chatDock">' +
-      '<div class="chatTop" data-act="chat-toggle">' +
+    return '<button class="coachFab" data-act="chat-toggle" title="Chat with Coach Roostoo"><span class="spark">✦</span>Coach</button>' +
+      '<div class="chatDock" id="chatDock">' +
+      '<div class="chatTop">' +
       '<span class="aiSpark">✦</span><span class="aiTitle">Coach Roostoo</span>' +
-      '<span class="aiSub">Your training coach — ask about indicators, reward functions, or strategy.</span>' +
-      '<button class="chatClps">' + (state.chatOpen ? 'hide ▴' : 'show ▾') + '</button>' +
+      '<span class="aiSub">Your training coach</span>' +
+      '<button class="chatClps" data-act="chat-toggle" title="Close chat">✕</button>' +
       '</div>' +
       '<div class="chatBody">' +
       '<div class="chatScroll" id="chatScroll"></div>' +
@@ -315,6 +396,10 @@
     if (!q || state.chatBusy) return;
     state.chat.push({ role: 'user', html: escapeHtml(q) });
     state.chatBusy = true;
+    // adapt the suggestion strip: decay old topics, boost the ones just asked about
+    state.asked[q] = true;
+    Object.keys(state.topicScores).forEach(k => { state.topicScores[k] *= 0.75; });
+    detectTopics(q).forEach(t => { state.topicScores[t] = (state.topicScores[t] || 0) + 1; });
     renderChat();
     if (forceCanned) {
       setTimeout(() => pushBot(formatBotText(canned(q))), 380 + Math.random() * 280);
@@ -387,6 +472,7 @@
       '<button class="spd on" data-act="spd" data-v="1">1×</button>' +
       '<button class="spd" data-act="spd" data-v="3">3×</button>' +
       '<button class="spd" data-act="spd" data-v="10">10×</button>' +
+      '<button class="spd" data-act="pause" id="btnPause" style="display:none">⏸ PAUSE</button>' +
       '<button class="spd" data-act="skip">SKIP ⇥</button></span>' +
       '</div>' +
       '<canvas id="cvPrice"></canvas>' +
@@ -474,6 +560,15 @@
       });
   }
 
+  // Pause/resume button in the player controls — only visible during a replay.
+  function setPauseUI(mode) {   // 'playing' | 'paused' | 'hidden'
+    const b = document.getElementById('btnPause');
+    if (!b) return;
+    b.style.display = mode === 'hidden' ? 'none' : '';
+    b.textContent = mode === 'paused' ? '▶ RESUME' : '⏸ PAUSE';
+    b.classList.toggle('on', mode === 'paused');
+  }
+
   function beginReplay(run) {
     const cvP = $('#cvPrice');
     if (!cvP) return;
@@ -487,10 +582,12 @@
         refreshRoster();
         refreshBar();
         refreshRunWrap();
-        setText('#csvName', 'backtest_' + run.symbol + 'USDT_PPO.csv — replay complete · ' + S.EPISODES + ' episodes');
+        setPauseUI('hidden');
+        setText('#csvName', 'backtest_' + run.symbol + 'USDT_PPO — replay complete · ' + S.EPISODES + ' episodes');
       }
     });
     replay.play();
+    setPauseUI('playing');
   }
 
   function paintFrame(run, st) {
@@ -525,7 +622,7 @@
     for (let k = 0; k < ep.trades.length; k++) { if (ep.trades[k].step <= st.step) pos = ep.trades[k].side === 'BUY' ? 'LONG' : 'FLAT'; }
     setHs('hsPos', pos, pos === 'LONG' ? 'pos' : '');
     setHs('hsTr', String(ep.trades.filter(t => t.step <= st.step).length), '');
-    setText('#lcEp', String(st.ep));
+    setText('#lcEp', String(st.ep + 1));
     const activeIdx = st.phase === 'update' || st.phase === 'done' ? 3 : st.step % 3;
     [['see', 0], ['act', 1], ['rew', 2], ['upd', 3]].forEach(p => {
       const el = $('#lb-' + p[0]);
@@ -551,7 +648,7 @@
       if (csvEl) {
         csvEl.textContent = stale
           ? 'stale — config changed since this run'
-          : 'backtest_' + sym + 'USDT_PPO.csv — replay complete · ' + S.EPISODES + ' episodes';
+          : 'backtest_' + sym + 'USDT_PPO — replay complete · ' + S.EPISODES + ' episodes';
         csvEl.classList.toggle('stale', !!stale);
       }
       const f = $('#sFill'); if (f) f.style.width = '100%';
@@ -642,6 +739,7 @@
   }
   function rerender(forceRun) {
     app.innerHTML = rootHtml();
+    document.body.classList.toggle('chat-open', state.chatOpen);
     wireName(); wireChat();
     renderChat();
     startPreview(!!forceRun);
@@ -654,9 +752,23 @@
   function wireChat() {
     const inp = $('#chatIn');
     if (inp) inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { chatSend(inp.value); inp.value = ''; }
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        chatSend(inp.value);
+        inp.value = '';
+      }
     });
   }
+  // Delegated fallback — survives any innerHTML swap of the chat dock, so
+  // Enter always sends even if the input was re-created after wiring.
+  document.addEventListener('keydown', e => {
+    const t = e.target;
+    if (e.key === 'Enter' && !e.isComposing && t && t.id === 'chatIn' && !e.defaultPrevented) {
+      e.preventDefault();
+      chatSend(t.value);
+      t.value = '';
+    }
+  });
 
   function onCfgChanged() {
     hideVerdict();
@@ -850,23 +962,28 @@
     }
     else if (act === 'spd') {
       if (replay) replay.setSpeed(parseInt(el.dataset.v));
-      document.querySelectorAll('.spd').forEach(b => b.classList.toggle('on', b === el));
+      document.querySelectorAll('[data-act="spd"]').forEach(b => b.classList.toggle('on', b === el));
+    }
+    else if (act === 'pause') {
+      if (!replay || replay.state.done) return;
+      if (replay.state.playing) { replay.pause(); setPauseUI('paused'); }
+      else { replay.play(); setPauseUI('playing'); }
     }
     else if (act === 'skip') { if (replay) replay.skip(); }
     else if (act === 'chat-toggle') {
-      if (e.target.closest('#chatScroll, .chatInRow')) return;
       state.chatOpen = !state.chatOpen;
-      const d = $('#chatDock');
-      d.classList.toggle('closed', !state.chatOpen);
-      d.querySelector('.chatClps').textContent = state.chatOpen ? 'hide ▴' : 'show ▾';
-      if (state.chatOpen) renderChat();
+      document.body.classList.toggle('chat-open', state.chatOpen);
+      if (state.chatOpen) {
+        renderChat();
+        const inp = $('#chatIn'); if (inp) inp.focus();
+      }
     }
     else if (act === 'chat-send') {
       const inp = $('#chatIn');
       if (inp) { chatSend(inp.value); inp.value = ''; }
     }
     else if (act === 'chat-chip') {
-      chatSend(el.dataset.q, true);
+      chatSend(el.dataset.q);
     }
     else if (act === 'chat-apply') {
       let patch;

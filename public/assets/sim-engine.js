@@ -311,7 +311,7 @@
       }
     }
     setTimeout(step, 120);
-    return { csvName: 'backtest_' + symbol + 'USDT_PPO_' + (cfg.frequency || '5min') + '.csv', sizeKB: totalKB };
+    return { csvName: 'backtest_' + symbol + 'USDT_PPO_' + (cfg.frequency || '5min'), sizeKB: totalKB };
   }
 
   // ── Canvas helpers ─────────────────────────────────────────────────────
@@ -476,7 +476,7 @@
     ctx.fillStyle = pal.label; ctx.textAlign = 'left';
     ctx.fillText('return per episode · avg(8)', pl, H - 5);
     ctx.textAlign = 'right';
-    ctx.fillText('ep ' + Math.max(0, data.length - 1) + '/' + (EPISODES - 1), pl + cw, H - 5);
+    ctx.fillText('ep ' + data.length + '/' + EPISODES, pl + cw, H - 5);
   }
 
   // ── Fake live data for asset pickers (24h change, volatility) ─────────
