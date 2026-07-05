@@ -11,13 +11,33 @@
   const FEATURES = ['RSI', 'ATR', 'VWAP', 'MACD', 'StochRSI', 'EMA-X', 'Bollinger', 'OBV', 'Hour', 'Weekday', 'Day', 'Month'];
 
   // Branded agent avatars — the identity carried through the build → launch flow.
-  // NOTE: this constant was missing entirely, which made avatarSrc() throw and
-  // silently killed every full rerender() — the page fell back to the static
-  // HTML and only partial refreshes (refreshRoster etc.) ever painted.
-  const AGENT_AVATARS = ['agent-orange'];
-  function avatarSrc(i) {
+  // Only one avatar PNG ships (agent-orange), so the different looks are CSS
+  // hue-rotated tints of the same art. Each entry = one pickable look.
+  const AGENT_AVATARS = [
+    { name: 'Orange',  filter: 'none' },
+    { name: 'Gold',    filter: 'hue-rotate(30deg) saturate(1.2)' },
+    { name: 'Lime',    filter: 'hue-rotate(70deg)' },
+    { name: 'Green',   filter: 'hue-rotate(110deg)' },
+    { name: 'Teal',    filter: 'hue-rotate(160deg)' },
+    { name: 'Blue',    filter: 'hue-rotate(210deg)' },
+    { name: 'Violet',  filter: 'hue-rotate(260deg)' },
+    { name: 'Pink',    filter: 'hue-rotate(310deg)' }
+  ];
+  function avatarIdx(i) {
     const n = AGENT_AVATARS.length;
-    return 'assets/brand/agents/' + AGENT_AVATARS[((i % n) + n) % n] + '.png';
+    return ((i % n) + n) % n;
+  }
+  function avatarSrc(i) {
+    return 'assets/brand/agents/agent-orange.png';
+  }
+  function avatarFilter(i) {
+    return AGENT_AVATARS[avatarIdx(i)].filter;
+  }
+  // Standard <img> for an avatar look — filter applied inline so every
+  // surface (bar, finalize sheet, warm-up ring, entrant stacks) matches.
+  function avatarImg(i, cls) {
+    return '<img' + (cls ? ' class="' + cls + '"' : '') + ' src="' + avatarSrc(i) +
+      '" style="filter:' + avatarFilter(i) + '" alt="agent avatar">';
   }
 
   const state = {
@@ -146,7 +166,7 @@
       '<img class="icon" src="assets/brand/roostoo-icon.png" alt="">' +
       '<span class="logo">Roostoo Labs</span><span class="dot">●</span><span class="tag">Strategy Lab — Build an Agent</span>' +
       '<span class="nameWrap">' +
-      '<button class="agentAva" data-act="avatar" title="Click to change your agent\'s look"><img src="' + avatarSrc(state.avatar) + '" alt="agent avatar"></button>' +
+      '<button class="agentAva" data-act="avatar" title="Click to change your agent\'s look">' + avatarImg(state.avatar) + '</button>' +
       '<span class="lbl">Agent</span><input class="nameInput" id="inName" value="' + state.name + '"></span>' +
       '<span class="barHint" id="barHint">' + n + '/' + state.roster.length + ' backtests up to date</span>' +
       '<button class="themeBtn" data-act="theme" title="Toggle light / dark">' + (state.theme === 'light' ? '☾' : '☀') + '</button>' +
@@ -836,7 +856,7 @@
       '<div class="rkCtl"><input type="range" min="1" max="' + max + '" value="' + r[valKey] + '" data-act="bslide" data-k="' + valKey + '" data-bv="bv-' + key + '"' + (r[onKey] ? '' : ' disabled') + '></div>' +
       (extra || '') + '</div>';
     return '<div class="sheet" data-screen-label="Finalize agent — risk">' +
-      '<div class="finHead"><img class="finAva" src="' + avatarSrc(state.avatar) + '" alt="">' +
+      '<div class="finHead">' + avatarImg(state.avatar, 'finAva') +
       '<div class="finHeadTxt"><h3>Finalize ' + state.name + '</h3>' +
       '<p class="sub">Set the <b>risk guardrails for the overall agent</b>. These apply across all ' + state.roster.length + ' asset' + (state.roster.length > 1 ? 's' : '') + ' when live.</p>' +
       '</div></div>' +
@@ -860,9 +880,21 @@
     ['  ✓ connected to live market feed', 'ok'],
     ['> status: WARMING UP', 'ac']
   ];
+  // Avatar picker — small sheet with every available look; current one highlighted.
+  function avatarSheetHtml() {
+    return '<div class="sheet avaSheet" data-screen-label="Choose agent avatar">' +
+      '<button class="sheetClose" data-act="close-avatar" aria-label="Close" title="Close">✕</button>' +
+      '<h3>Agent look</h3>' +
+      '<p class="sub">Pick an avatar for <b>' + escapeHtml(state.name) + '</b>.</p>' +
+      '<div class="avaGrid">' + AGENT_AVATARS.map((a, i) =>
+        '<button class="avaOpt' + (i === state.avatar ? ' on' : '') + '" data-act="avatar-pick" data-i="' + i + '" title="' + a.name + '">' +
+        avatarImg(i) + '<span>' + a.name + '</span></button>'
+      ).join('') + '</div></div>';
+  }
+
   function avaStack(seed, n) {
     let h = '<span class="avaStack">';
-    for (let k = 0; k < n; k++) h += '<img src="' + avatarSrc(seed + k) + '" alt="">';
+    for (let k = 0; k < n; k++) h += avatarImg(seed + k);
     return h + '</span>';
   }
   function warmHtml() {
@@ -876,7 +908,7 @@
       '<button class="sheetClose" data-act="close-warm" aria-label="Close" title="Back to lab">✕</button>' +
       '<div class="bootLog" id="bootLog"></div>' +
       '<div id="warmBody" style="display:none">' +
-      '<div class="warmRingB"><img src="' + avatarSrc(state.avatar) + '" alt=""></div>' +
+      '<div class="warmRingB">' + avatarImg(state.avatar) + '</div>' +
       '<div class="warmPillB"><span class="d"></span>WARMING UP</div>' +
       '<h3>' + state.name + '</h3>' +
       '<p class="copy"><b>' + state.name + '</b> is live in the paper-trading runtime and warming up — <b>enroll it into the next competition to begin competing.</b></p>' +
@@ -999,10 +1031,17 @@
       rerender(true);
     }
     else if (act === 'avatar') {
-      state.avatar = (state.avatar + 1) % AGENT_AVATARS.length;
-      document.querySelectorAll('.agentAva img').forEach(im => { im.src = avatarSrc(state.avatar); });
-      toast('Agent look updated');
+      const ov = $('#ovlAvatar');
+      ov.innerHTML = avatarSheetHtml();
+      ov.classList.add('show');
     }
+    else if (act === 'avatar-pick') {
+      state.avatar = avatarIdx(parseInt(el.dataset.i));
+      document.querySelectorAll('.agentAva img').forEach(im => { im.style.filter = avatarFilter(state.avatar); });
+      $('#ovlAvatar').classList.remove('show');
+      toast('Agent look updated — ' + AGENT_AVATARS[state.avatar].name);
+    }
+    else if (act === 'close-avatar') { $('#ovlAvatar').classList.remove('show'); }
     else if (act === 'theme') {
       applyTheme(state.theme === 'light' ? 'dark' : 'light');
       const tb = document.querySelector('.themeBtn'); if (tb) tb.textContent = state.theme === 'light' ? '☾' : '☀';
