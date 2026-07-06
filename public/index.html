@@ -127,7 +127,7 @@
   .bench::-webkit-scrollbar { display: none; }
   @media (max-width: 1100px) { .bench { grid-template-columns: 264px minmax(0,1fr); } .railR { display: none; } }
   .rail { display: flex; flex-direction: column; gap: 14px; }
-  .panel { background: var(--panel); border: 1px solid rgba(254,219,41,0.5); border-radius: 8px; padding: 15px; box-shadow: var(--elev-card); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 15px; box-shadow: var(--elev-card); }
   .panel h4 { margin: 0 0 12px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
 
   .roster { display: flex; flex-direction: column; gap: 5px; }
@@ -186,7 +186,7 @@
   .runNow { background: var(--accent); color: #0C1117; border: none; border-radius: 24px; padding: 6px 15px; font-size: 11px; font-weight: 700; letter-spacing: 0.073em; text-transform: uppercase; cursor: pointer; font-family: var(--display); flex-shrink: 0; }
   .runNow:hover { filter: brightness(1.05); }
 
-  .stagePanel { position: relative; background: var(--panel); border: 1px solid rgba(254,219,41,0.5); border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--elev-card); }
+  .stagePanel { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--elev-card); }
   .headStats { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
   .hs { display: flex; flex-direction: column; gap: 2px; }
   .hs .l { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--dim); font-weight: 600; white-space: nowrap; }
