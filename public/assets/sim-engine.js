@@ -64,6 +64,16 @@
     if (p >= 0.01) return p.toFixed(4);
     return p.toFixed(7);
   }
+  // Time formatting for chart axes (bars carry UTC timestamps)
+  function fmtClock(t) {
+    const d = new Date(t), p = n => (n < 10 ? '0' : '') + n;
+    return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
+  }
+  const MONTHS_S = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmtDay(t) {
+    const d = new Date(t);
+    return MONTHS_S[d.getUTCMonth()] + ' ' + d.getUTCDate();
+  }
 
   // ── Synthetic 5-minute market, seeded per asset ────────────────────────
   const MARKET_BARS = 1400;   // more history → varied, non-repeating episode windows for 300 eps
@@ -341,18 +351,65 @@
       if (p < lo) lo = p; if (p > hi) hi = p;
     }
     const pad = (hi - lo) * 0.1 || 1; lo -= pad; hi += pad;
-    const pl = 54, pr = 10, pt = 10, pb = 20;
+    const pl = 64, pr = 12, pt = 26, pb = 34;
     const cw = W - pl - pr, ch = H - pt - pb;
     const xOf = i => pl + ((i - start) / (STEPS - 1)) * cw;
     const yOf = p => pt + (1 - (p - lo) / (hi - lo)) * ch;
-    // grid
+    ctx.font = '9px ' + pal.font;
+    // top strip — chart context (left) + trade-marker legend (right):
+    // triangle direction = trade side, marker color = round-trip outcome
+    const ly = pt - 13;
+    ctx.fillStyle = pal.label; ctx.textAlign = 'left';
+    ctx.fillText(run.symbol + 'USDT · 5m bars', pl, ly + 3);
+    const legend = [
+      { tri: 'up', label: 'buy' },
+      { tri: 'down', label: 'sell' },
+      { dot: pal.green, label: 'win' },
+      { dot: pal.red, label: 'loss' },
+      { dot: pal.gold, label: 'open' }
+    ];
+    let lw = 0;
+    legend.forEach(it => { it.w = 12 + ctx.measureText(it.label).width; lw += it.w + 9; });
+    let lx = pl + cw - lw + 9;
+    legend.forEach(it => {
+      if (it.tri) {
+        ctx.fillStyle = pal.label;
+        ctx.beginPath();
+        if (it.tri === 'up') { ctx.moveTo(lx + 4, ly - 4); ctx.lineTo(lx, ly + 3); ctx.lineTo(lx + 8, ly + 3); }
+        else { ctx.moveTo(lx + 4, ly + 3); ctx.lineTo(lx, ly - 4); ctx.lineTo(lx + 8, ly - 4); }
+        ctx.closePath(); ctx.fill();
+      } else {
+        ctx.fillStyle = it.dot;
+        ctx.beginPath(); ctx.arc(lx + 4, ly, 3.2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = pal.label;
+      ctx.fillText(it.label, lx + 12, ly + 3);
+      lx += it.w + 9;
+    });
+    // horizontal grid + price tick labels (y axis)
     ctx.strokeStyle = pal.grid; ctx.lineWidth = 1;
-    ctx.fillStyle = pal.label; ctx.font = '9px ' + pal.font; ctx.textAlign = 'right';
+    ctx.textAlign = 'right';
     for (let k = 0; k <= 4; k++) {
       const y = pt + (k / 4) * ch;
       ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(pl + cw, y); ctx.stroke();
-      ctx.fillText(fmtPrice(hi - (k / 4) * (hi - lo)), pl - 5, y + 3);
+      ctx.fillText(fmtPrice(hi - (k / 4) * (hi - lo)), pl - 6, y + 3);
     }
+    // vertical grid + time tick labels (x axis)
+    ctx.textAlign = 'center';
+    for (let k = 0; k <= 4; k++) {
+      const idx = start + Math.round((k / 4) * (STEPS - 1));
+      const x = pl + (k / 4) * cw;
+      ctx.strokeStyle = pal.grid;
+      ctx.beginPath(); ctx.moveTo(x, pt); ctx.lineTo(x, pt + ch); ctx.stroke();
+      ctx.fillText(fmtClock(run.market[idx].t), x, pt + ch + 12);
+    }
+    // rotated y-axis title
+    ctx.save();
+    ctx.translate(11, pt + ch / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('PRICE (USDT)', 0, 0);
+    ctx.restore();
     // dim full path
     ctx.strokeStyle = pal.accentDim; ctx.lineWidth = 1.1; ctx.beginPath();
     for (let i = start; i < end; i++) {
@@ -392,9 +449,12 @@
       ctx.fillStyle = pal.flash.replace('@A', (0.16 * st.updateT).toFixed(3));
       ctx.fillRect(pl, pt, cw, ch);
     }
-    // footer
+    // x-axis title + step counter footer
+    const d0 = fmtDay(run.market[start].t), d1 = fmtDay(run.market[end - 1].t);
     ctx.fillStyle = pal.label; ctx.textAlign = 'left';
-    ctx.fillText(run.symbol + 'USDT · 5m bars · episode window @ bar ' + start + ' · step ' + st.step + '/' + STEPS, pl, H - 7);
+    ctx.fillText('TIME (UTC) — ' + d0 + (d1 === d0 ? '' : ' → ' + d1), pl, H - 6);
+    ctx.textAlign = 'right';
+    ctx.fillText('step ' + st.step + '/' + STEPS + ' · window @ bar ' + start, pl + cw, H - 6);
   }
 
   // Equity sparkline for current episode
