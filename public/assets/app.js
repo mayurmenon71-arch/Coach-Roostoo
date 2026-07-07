@@ -134,9 +134,13 @@
     for (let line of lines) {
       const t = line.trim();
       if (t === '') { closeList(); continue; }
+      const hd = t.match(/^#{1,6}\s+(.*)$/);
       const b = t.match(/^[-•*]\s+(.*)$/);
       const n = t.match(/^(\d+)\.\s+(.*)$/);
-      if (b) {
+      if (hd) {
+        closeList();
+        html += '<p class="cmH">' + inline(hd[1]) + '</p>';
+      } else if (b) {
         if (!inList || listTag !== 'ul') { closeList(); html += '<ul>'; inList = true; listTag = 'ul'; }
         html += '<li>' + inline(b[1]) + '</li>';
       } else if (n) {
@@ -340,7 +344,7 @@
     if (/(training|steps|250|300|350)/.test(s))
       return 'Training steps control how much practice the agent gets before you see results. 250k is a fast draft; 350k is the most thorough — usually better grades. The backtest replays the full 300-episode training history either way.';
     if (/(grade|verdict|converge|score|why.*(low|bad|drop))/.test(s))
-      return 'The grade summarizes the last 10 training episodes: average return, win rate, drawdown and Sharpe. A or B means the config converged for that asset. C or worse — try more training steps, a different reward, or fewer noisy indicators.';
+      return 'The grade summarizes the last 10 training episodes: average return, win rate, drawdown and Sharpe. A or B means the config converged for that asset. C or worse — try more training steps, a different reward, or fewer noisy indicators. Keep in mind a strong backtest can **overfit** its training window and is not representative of live performance — the real test is forward-testing your agent in Roostoo\'s live paper-trading competitions.';
     if (/(re-?run|stale|orange|refresh)/.test(s))
       return 'Any edit to the config marks every asset stale (orange dot). Hit the ↻ next to an asset, the RE-RUN button above the chart, or re-run from the verdict card to refresh its backtest.';
     if (/(ppo|algorithm|how.*(learn|train|work))/.test(s))
@@ -378,7 +382,8 @@
       "YOUR JOB:",
       "- Explain indicators, reward functions, decision frequency, training steps, strategy, and how the Roostoo platform works (competitions, fees, tiers, XP, wallets, payouts), in plain, beginner-friendly language.",
       "- ALWAYS ground answers in their current configuration above; reference the specific settings they selected. If they ask about something not enabled, explain it and note it isn't currently selected.",
-      "- Be concise: 2-3 short paragraphs maximum. Use **bold** for key terms and bullet points for lists where it aids readability. Use *single asterisks* to highlight the single most important figure or fact (e.g. a fee or a number).",
+      "- Be concise: 2-3 short paragraphs maximum. Use **bold** for key terms and bullet points for lists where it aids readability. Use *single asterisks* to highlight the single most important figure or fact (e.g. a fee or a number). NEVER use markdown headings (#, ##, ###) — the chat renders plain paragraphs, bold, and bullets only.",
+      "- BACKTESTING REALITY CHECK: whenever you discuss backtest results, grades, convergence, or the learning curve, make clear that backtests can OVERFIT — the agent may have learned patterns specific to its training window, so a strong backtest is NOT representative of how the agent will actually perform live. That is exactly why Roostoo built the live paper-trading competition platform: it lets users FORWARD-TEST their agents on live market data with real economic incentives, which is the true test of a strategy. Keep this to one short sentence woven into the answer — don't let it dominate.",
       "",
       "STAYING ON TOPIC:",
       "- You are a Roostoo coach, not a general-purpose assistant.",
