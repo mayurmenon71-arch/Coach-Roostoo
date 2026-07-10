@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coach Roostoo · Create an Agent</title>
+<link rel="icon" href="/assets/roostoo-icon.png">
+<style>
+  :root{
+    --bg:#000; --panel:#0B0B0C; --border:rgba(255,255,255,.09); --text:#fff;
+    --muted:#BDBDBD; --dim:#7A7A82; --accent:#FEDB29; --green:#00FF87;
+    --red:#EF5144; --orange:#FF873C;
+    --body:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'IBM Plex Mono','SF Mono',Menlo,Consolas,monospace;
+    --input-bg:rgba(255,255,255,.06); --hover:rgba(255,255,255,.04);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);height:100vh;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--border);flex-shrink:0}
+  header img{width:26px;height:26px}
+  header h1{font-size:15px;font-weight:600}
+  header .sub{color:var(--dim);font-size:12px}
+  header a{margin-left:auto;color:var(--dim);font-size:12px;text-decoration:none;border:1px solid var(--border);padding:6px 12px;border-radius:24px}
+  header a:hover{color:var(--text);background:var(--hover)}
+  #chat{flex:1;overflow-y:auto;padding:26px 0}
+  .inner{max-width:860px;margin:0 auto;padding:0 22px}
+  .msg{margin-bottom:18px;display:flex;gap:10px}
+  .msg .who{flex-shrink:0;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--mono);border:1px solid var(--border)}
+  .msg.user .who{background:var(--input-bg);color:var(--muted)}
+  .msg.bot .who{background:rgba(254,219,41,.12);color:var(--accent)}
+  .msg .bubble{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 15px;font-size:13.5px;line-height:1.55;color:var(--muted);max-width:78%;white-space:pre-wrap}
+  .msg.user .bubble{margin-left:auto;color:var(--text)}
+  .msg.user{flex-direction:row-reverse}
+  .msg .bubble b,.msg .bubble strong{color:var(--text)}
+  .msg.err .bubble{border-color:rgba(239,81,68,.5)}
+  .typing{color:var(--dim);font-size:12px;font-family:var(--mono);padding:4px 42px}
+  /* gene card */
+  .gcard{border:1px solid rgba(254,219,41,.35);border-radius:12px;background:var(--panel);margin:6px 0 18px;overflow:hidden}
+  .gcard .ghead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:rgba(254,219,41,.05)}
+  .gcard .ghead .gname{font-size:15px;font-weight:600}
+  .gcard .ghead .gtag{font-family:var(--mono);font-size:11px;color:var(--accent);border:1px solid rgba(254,219,41,.4);border-radius:24px;padding:3px 10px}
+  .gcard .ghead .gdrag{font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:auto}
+  .gsec{padding:10px 18px 4px}
+  .gsec h4{font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:8px 0 6px}
+  .grow{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(255,255,255,.05);font-size:13px;align-items:baseline}
+  .grow:last-child{border-bottom:0}
+  .tier{flex-shrink:0;width:72px;font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;padding:2px 0;text-align:center;border-radius:4px}
+  .tier.user{color:var(--green);border:1px solid rgba(0,255,135,.3)}
+  .tier.coach{color:var(--accent);border:1px solid rgba(254,219,41,.3)}
+  .tier.platform{color:var(--dim);border:1px solid var(--border)}
+  .glabel{flex-shrink:0;width:190px;color:var(--muted)}
+  .gval{color:var(--text);font-family:var(--mono);font-size:12.5px}
+  .gwhy{display:block;color:var(--dim);font-size:11.5px;margin-top:3px;font-style:italic}
+  .gbreak{margin:12px 18px 14px;padding:12px 14px;border:1px solid rgba(255,135,60,.35);border-radius:8px;font-size:12.5px;color:var(--orange);line-height:1.5}
+  .gwarn{margin:0 18px 14px;font-size:12px;color:var(--orange)}
+  .gfoot{display:flex;gap:10px;padding:12px 18px;border-top:1px solid var(--border)}
+  .gfoot button{background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:24px;padding:7px 16px;font-size:12px;cursor:pointer;font-family:var(--body)}
+  .gfoot button:hover{background:var(--hover);border-color:var(--accent)}
+  /* composer */
+  #composer{flex-shrink:0;border-top:1px solid var(--border);padding:14px 22px 18px}
+  #composer .inner{display:flex;gap:10px}
+  #q{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:24px;color:var(--text);padding:11px 18px;font-size:13.5px;font-family:var(--body);outline:none}
+  #q:focus{border-color:rgba(254,219,41,.5)}
+  #send{background:var(--accent);color:#000;border:0;border-radius:24px;padding:0 22px;font-weight:600;font-size:13px;cursor:pointer}
+  #send:disabled{opacity:.4;cursor:default}
+  .chips{max-width:860px;margin:0 auto 10px;padding:0 22px;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:24px;padding:6px 12px;cursor:pointer;background:transparent}
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <img src="/assets/roostoo-icon.png" alt="">
+  <div><h1>Create an Agent</h1><div class="sub">describe the trader you want — Coach compiles it into a validated config</div></div>
+  <a href="/">← Strategy Lab</a>
+</header>
+
+<div id="chat"><div class="inner" id="feed"></div></div>
+
+<div class="chips" id="chips">
+  <button class="chip">I want an agent that rides big moves on BTC and ETH but doesn't get chopped up</button>
+  <button class="chip">Something that buys dips on SOL but never blows up</button>
+  <button class="chip">Pounce when the market panics — liquidation cascades, funding spikes</button>
+  <button class="chip">Build me a scalper that trades every 10 seconds</button>
+</div>
+
+<div id="composer"><div class="inner">
+  <input id="q" placeholder="Describe the trader you want… e.g. “buy the dip but don't blow up”" autocomplete="off">
+  <button id="send">Send</button>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var feed = document.getElementById('feed');
+  var chat = document.getElementById('chat');
+  var q = document.getElementById('q');
+  var send = document.getElementById('send');
+  var history = [];   // {role, content} — full conversation, stateless backend
+  var busy = false;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function md(s) { // minimal: **bold** only (matches coach output rules)
+    return esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  }
+  function scrollDown() { chat.scrollTop = chat.scrollHeight; }
+
+  function addMsg(role, html, cls) {
+    var div = document.createElement('div');
+    div.className = 'msg ' + role + (cls ? ' ' + cls : '');
+    div.innerHTML = '<div class="who">' + (role === 'user' ? 'you' : 'CR') + '</div>' +
+                    '<div class="bubble">' + html + '</div>';
+    feed.appendChild(div);
+    scrollDown();
+  }
+
+  function tierBadge(t) { return '<span class="tier ' + t + '">' + t + '</span>'; }
+
+  function renderCard(card) {
+    var h = '<div class="gcard">';
+    h += '<div class="ghead"><span class="gname">' + esc(card.name || 'Agent') + '</span>' +
+         '<span class="gtag">' + esc(card.archetype) + '</span>' +
+         '<span class="gdrag">fee drag: ' + esc(card.fee_drag) + '</span></div>';
+    (card.sections || []).forEach(function (sec) {
+      h += '<div class="gsec"><h4>' + esc(sec.block) + '</h4>';
+      (sec.rows || []).forEach(function (row) {
+        var why = row.rationale || row.locked_reason;
+        h += '<div class="grow">' + tierBadge(row.tier) +
+             '<span class="glabel">' + esc(row.label) + '</span>' +
+             '<span class="gval">' + esc(String(row.value)) +
+             (why ? '<span class="gwhy">' + esc(why) + '</span>' : '') +
+             '</span></div>';
+      });
+      h += '</div>';
+    });
+    if (card.breakeven) {
+      h += '<div class="gbreak"><b>Breakeven preview</b> — ' + esc(card.breakeven.explanation) + '</div>';
+    }
+    (card.warnings || []).forEach(function (w) {
+      h += '<div class="gwarn">⚠ ' + esc(w.path) + ': ' + esc(w.message) + '</div>';
+    });
+    h += '<div class="gfoot"><button data-act="copy">Copy config JSON</button>' +
+         '<button data-act="tweak">Ask Coach to tweak…</button></div></div>';
+
+    var wrap = document.createElement('div');
+    wrap.innerHTML = h;
+    wrap.querySelector('[data-act="copy"]').addEventListener('click', function () {
+      navigator.clipboard.writeText(JSON.stringify(card.config, null, 2));
+      this.textContent = 'Copied ✓';
+    });
+    wrap.querySelector('[data-act="tweak"]').addEventListener('click', function () {
+      q.focus();
+      q.placeholder = 'e.g. “make it long-only” or “hold positions longer”';
+    });
+    feed.appendChild(wrap.firstChild);
+    scrollDown();
+  }
+
+  function setBusy(b) {
+    busy = b;
+    send.disabled = b;
+    var t = document.getElementById('typing');
+    if (b && !t) {
+      t = document.createElement('div');
+      t.id = 'typing';
+      t.className = 'typing';
+      t.textContent = 'Coach is compiling…';
+      feed.appendChild(t);
+      scrollDown();
+    } else if (!b && t) { t.remove(); }
+  }
+
+  function ask(text) {
+    text = (text || '').trim();
+    if (!text || busy) return;
+    addMsg('user', esc(text));
+    history.push({ role: 'user', content: text });
+    q.value = '';
+    setBusy(true);
+    fetch('/api/compile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history })
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      setBusy(false);
+      var text = out.text || '(no response)';
+      history.push({ role: 'assistant', content: text });
+      if (out.type === 'gene_card' && out.card) {
+        addMsg('bot', md(text));
+        renderCard(out.card);
+      } else if (out.type === 'error') {
+        addMsg('bot', md(text), 'err');
+      } else {
+        addMsg('bot', md(text));
+      }
+    }).catch(function () {
+      setBusy(false);
+      addMsg('bot', 'Backend not reachable — is the server running with an API key set?', 'err');
+    });
+  }
+
+  send.addEventListener('click', function () { ask(q.value); });
+  q.addEventListener('keydown', function (e) { if (e.key === 'Enter') ask(q.value); });
+  document.getElementById('chips').addEventListener('click', function (e) {
+    if (e.target.classList.contains('chip')) ask(e.target.textContent);
+  });
+
+  addMsg('bot', md('Tell me about the trader you want — in plain language. ' +
+    '(“ride big moves”, “buy dips but never blow up”, “pounce on panic”…) ' +
+    "I'll compile it into an RL agent config: you pick what it **sees**, what it " +
+    '**wants**, and how it can **act** — the thresholds are learned, not hand-picked. ' +
+    'Every config I produce is checked by a deterministic validator and a ' +
+    'breakeven fee screen before you see the gene card.'));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Env / secrets — never commit provider keys (set them in the Vercel dashboard)
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+
+# Local tooling
+.claude/

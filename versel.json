@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/create", "destination": "/public/create.html" },
+    { "source": "/create.html", "destination": "/public/create.html" },
+    { "source": "/assets/:path*", "destination": "/public/assets/:path*" },
+    { "source": "/brand/:path*", "destination": "/public/assets/brand/:path*" }
+  ]
+}
