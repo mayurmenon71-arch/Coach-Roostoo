@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/compile.py": {
+      "includeFiles": "coach_compiler/**"
+    }
+  },
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" },
     { "source": "/create", "destination": "/public/create.html" },
