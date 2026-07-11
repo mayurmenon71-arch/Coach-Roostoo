@@ -9,8 +9,10 @@ Contract (stateless, like /api/coach):
   -> 200 { "type": "error",     "text": "...", "errors": [...] }    repair rounds exhausted
 
 Env vars (same as api/coach.py): API_KEY, API_URL, MODEL.
-GET /api/compile -> health check incl. a deterministic self-test of the
-validator against the three worked-example configs.
+GET /api/compile -> health check + deterministic validator self-test. If the
+coach_compiler package failed to import (the classic serverless bundling
+gotcha), GET returns a diagnostic payload instead of the whole function
+crashing — so you can see exactly what went wrong from the browser.
 """
 
 import json
@@ -18,12 +20,49 @@ import os
 import sys
 from http.server import BaseHTTPRequestHandler
 
-# The coach_compiler package sits at the repo root, one level above api/.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ---------------------------------------------------------------------------
+# Resilient import of the coach_compiler package.
+#
+# On Vercel the working directory and bundle layout aren't guaranteed, so we
+# add every plausible root to sys.path and import inside a try. If it still
+# fails we DON'T crash the function at module-load (which yields an opaque
+# FUNCTION_INVOCATION_FAILED); instead we record the error and surface it from
+# the health endpoint with enough context to fix it.
+# ---------------------------------------------------------------------------
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT_CANDIDATES = [
+    os.path.dirname(_HERE),   # repo root (parent of api/) — the intended one
+    _HERE,                    # api/ itself
+    os.getcwd(),              # process CWD
+    "/var/task",              # AWS Lambda / Vercel task root
+]
+for _r in _ROOT_CANDIDATES:
+    if _r and _r not in sys.path:
+        sys.path.insert(0, _r)
 
-from coach_compiler import exemplars  # noqa: E402
-from coach_compiler.orchestrator import run_create  # noqa: E402
-from coach_compiler.validator import validate_config  # noqa: E402
+_IMPORT_OK = True
+_IMPORT_ERROR = None
+try:
+    from coach_compiler import exemplars
+    from coach_compiler.orchestrator import run_create
+    from coach_compiler.validator import validate_config
+except Exception as _e:  # noqa: BLE001
+    _IMPORT_OK = False
+    _IMPORT_ERROR = "%s: %s" % (type(_e).__name__, _e)
+
+
+def _diagnostic():
+    """What the health endpoint reports when the package didn't import — a
+    map of each candidate root and whether coach_compiler is visible there."""
+    seen = {}
+    for r in _ROOT_CANDIDATES:
+        pkg = os.path.join(r, "coach_compiler")
+        try:
+            seen[r] = sorted(os.listdir(pkg))[:8] if os.path.isdir(pkg) else "(no coach_compiler here)"
+        except Exception as e:  # noqa: BLE001
+            seen[r] = "(unreadable: %s)" % e
+    return {"import_error": _IMPORT_ERROR, "roots_checked": seen,
+            "sys_path_head": sys.path[:5]}
 
 
 class handler(BaseHTTPRequestHandler):
@@ -35,8 +74,13 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    # GET /api/compile -> health + deterministic self-test
+    # GET /api/compile -> health + deterministic self-test (or diagnostic)
     def do_GET(self):
+        if not _IMPORT_OK:
+            self._send(500, {"ok": False,
+                             "error": "coach_compiler failed to import",
+                             "diagnostic": _diagnostic()})
+            return
         selftest = all(validate_config(cfg)["valid"]
                        for _, _, _, cfg, _, _, _ in exemplars.WORKED_EXAMPLES)
         self._send(200, {
@@ -48,6 +92,12 @@ class handler(BaseHTTPRequestHandler):
 
     # POST /api/compile -> one Create-mode turn
     def do_POST(self):
+        if not _IMPORT_OK:
+            self._send(500, {"type": "error",
+                             "text": "Server misconfigured: coach_compiler did not "
+                                     "bundle. Hit GET /api/compile for the diagnostic.",
+                             "detail": _IMPORT_ERROR})
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or "{}")
@@ -67,7 +117,8 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001
             print("[compile] error:", str(e))
             self._send(502, {"type": "error",
-                             "text": "The compiler backend hit an error contacting the model provider."})
+                             "text": "The compiler backend hit an error contacting the model provider.",
+                             "detail": str(e)})
             return
 
         self._send(200, out)
