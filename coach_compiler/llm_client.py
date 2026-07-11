@@ -20,7 +20,7 @@ class LLMError(RuntimeError):
     pass
 
 
-def call_chat(messages, tools=None, temperature=0.2, max_tokens=3000):
+def call_chat(messages, tools=None, temperature=0.2, max_tokens=1400):
     """One chat-completions call. Returns the assistant message dict:
     {"role": "assistant", "content": str|None, "tool_calls": [...]|absent}.
 
