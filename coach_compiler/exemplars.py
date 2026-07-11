@@ -145,26 +145,43 @@ def _fmt(obj):
 
 def exemplar_block():
     """Render the few-shot transcripts for the system prompt.
-    Reasoning first, THEN the tool call — classification stays auditable."""
-    parts = ["FEW-SHOT EXEMPLARS (follow this exact shape)"]
+
+    Classification is INTERNAL — it lives inside the emit_config tool call
+    (the auditable record) and never in user-facing prose. The exemplars model
+    that: no "Heard X -> archetype Y" preambles, no archetype ids on screen.
+    """
+    parts = ["FEW-SHOT EXEMPLARS (follow this exact shape). Note the bracketed "
+             "[internal] lines are NOT shown to the user — they only illustrate "
+             "the classification that goes inside the tool call."]
     for tag, intent, arch, cfg, rat, signals, note in WORKED_EXAMPLES:
         parts.append(
             "--- Exemplar %s ---\n"
             "USER: %s\n"
-            "ASSISTANT (reasoning first): Heard %s -> archetype %s. Tempo, "
-            "risk, direction and assets are all implied, so no elicitation "
-            "questions are needed.\n"
-            "ASSISTANT calls emit_config: %s\n"
-            "ASSISTANT (after validation passes, presenting the gene card): %s"
-            % (tag, intent,
-               " + ".join("'" + s + "'" for s in signals), arch,
+            "[internal: classifies as %s; all five slots implied, so no "
+            "elicitation needed — call emit_config directly, with NO preamble "
+            "text to the user]\n"
+            "ASSISTANT calls emit_config: %s"
+            % (tag, intent, arch,
                _fmt({"classification": {"archetype": arch, "confidence": 0.9,
                                         "signals_heard": signals},
-                     "config": cfg, "rationale": rat}),
-               note))
-    # Elicitation exemplar — vague intent, ask before emitting.
+                     "config": cfg, "rationale": rat})))
+    # Clean-elicitation exemplar — classifiable, but missing slots. Note the
+    # reply uses plain language ("a momentum agent") and NEVER the archetype id
+    # or a "-> archetype" mapping.
     parts.append(
-        "--- Exemplar D (vague intent -> elicit, do NOT emit yet) ---\n"
+        "--- Exemplar D (clear style, missing details -> elicit cleanly, no jargon) ---\n"
+        "USER: give me a momentum based strategy\n"
+        "[internal: classifies as intraday_momentum, but assets/risk/direction "
+        "are unknown — ask, don't emit yet]\n"
+        "ASSISTANT: Nice — a momentum agent rides sustained moves and sits out "
+        "the chop. To shape yours I need a few things: (1) which coins? (2) how "
+        "hard should it chase a move — react within a minute, or a calmer "
+        "5-15 minute pulse? (3) what's the most it could be down before you'd "
+        "want it stopped? (4) long-only, or allowed to short too? Everything "
+        "else I'll set to sensible defaults and show you on the gene card.")
+    # Vague-intent exemplar — no archetype known yet, elicit the story first.
+    parts.append(
+        "--- Exemplar E (vague intent -> elicit, do NOT emit yet) ---\n"
         "USER: I want a trading bot that makes money.\n"
         "ASSISTANT: Happy to build one — every agent here is a learned policy "
         "with a personality, so let me pin down three things. (1) What should "
@@ -176,7 +193,7 @@ def exemplar_block():
         "proves itself.")
     # Out-of-envelope exemplar — refusal with numbers + redirect.
     parts.append(
-        "--- Exemplar E (out-of-envelope -> refuse with numbers, redirect) ---\n"
+        "--- Exemplar F (out-of-envelope -> refuse with numbers, redirect) ---\n"
         "USER: Build me a scalper that trades every 10 seconds.\n"
         "ASSISTANT calls breakeven_calc: {\"decision_interval\":\"30s\","
         "\"turnover_band_hi\":30}\n"
