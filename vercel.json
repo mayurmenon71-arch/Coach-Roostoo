@@ -3,5 +3,9 @@
     "server.py": {
       "includeFiles": "{public,coach_compiler}/**"
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/create", "destination": "/create.html" }
+  ]
 }
