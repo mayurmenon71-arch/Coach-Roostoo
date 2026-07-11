@@ -57,6 +57,17 @@ SYSTEM_PROMPT = (
 
 app = FastAPI()
 
+
+# TEMP DIAGNOSTIC: surface the exact path FastAPI sees, so we can tell why the
+# bare "/" request isn't matching the root route under Vercel's routing.
+@app.middleware("http")
+async def _debug_path(request, call_next):
+    resp = await call_next(request)
+    resp.headers["x-debug-path"] = repr(request.scope.get("path"))
+    resp.headers["x-debug-rawpath"] = repr(request.scope.get("raw_path"))
+    return resp
+
+
 # ============================================================================
 # LAYER 3 — OUTPUT GUARDRAIL (provider-agnostic — screens text)
 # ============================================================================
