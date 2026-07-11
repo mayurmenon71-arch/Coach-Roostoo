@@ -1,0 +1,15 @@
+# server.py is the RENDER entrypoint (render.yaml runs `uvicorn server:app`),
+# where it serves both the static site and the API from one process. On VERCEL
+# the model is different — static files in public/ + each api/*.py as its own
+# serverless function — and server.py must NOT be uploaded: Vercel would build
+# its FastAPI `app` as a catch-all function that intercepts /api/* and crashes
+# on import (StaticFiles(directory="public") can't resolve from /var/task).
+server.py
+render.yaml
+
+# Dev-only — not needed by the serverless functions, keeps the bundle lean.
+tests/
+evals/
+.claude/
+__pycache__/
+*.pyc
