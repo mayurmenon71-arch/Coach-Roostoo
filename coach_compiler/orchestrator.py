@@ -25,6 +25,37 @@ MAX_MODEL_CALLS = 6   # hard ceiling per request
 MAX_REPAIR_ROUNDS = 2  # per Section 8.3 WORKFLOW step 4
 
 
+# Per-archetype honest trade-off note, appended when the gene card is returned.
+# Templated (not a second LLM call) to keep a compile to a single round-trip.
+_ARCHETYPE_NOTE = {
+    "intraday_momentum": "Momentum agents lose small in chop and win big when a "
+        "move runs — expect flat, patient stretches in range-bound markets.",
+    "mean_reversion": "This fades overextensions, so by design it underperforms "
+        "in strong trends — that's the trade-off you chose. Its fast cadence "
+        "only passed because the turnover band clears the fee screen.",
+    "breakout": "True breakouts are rare, so it trades seldom and takes small "
+        "losses on false breaks to catch the occasional big expansion.",
+    "flow_driven": "Flow events are rare and fat-tailed, so this agent carries "
+        "higher overfit risk — its live, cross-competition record matters far "
+        "more than any single backtest.",
+}
+
+
+def _closing_note(card):
+    arch = card.get("archetype")
+    note = _ARCHETYPE_NOTE.get(arch, "")
+    be = (card.get("breakeven") or {}).get("explanation", "")
+    parts = ["Here's **%s** — a %s agent." % (card.get("name"), arch.replace("_", " "))]
+    if note:
+        parts.append(note)
+    if be:
+        parts.append(be)
+    parts.append("Every value above is checked by a deterministic validator and "
+                 "the fee-breakeven screen — but the live arena on unseen data is "
+                 "the real test, not this preview.")
+    return " ".join(parts)
+
+
 def _tool_result(call_id, name, payload):
     return {
         "role": "tool",
@@ -111,18 +142,17 @@ def run_create(messages, llm=None):
                 last_errors = verdict["errors"]
 
                 if verdict["valid"]:
-                    pending_card = build_gene_card(
+                    card = build_gene_card(
                         verdict["config"], rationale, classification,
                         verdict["breakeven"], verdict["warnings"],
                     )
-                    convo.append(_tool_result(call_id, name, {
-                        "valid": True,
-                        "warnings": verdict["warnings"],
-                        "breakeven": verdict["breakeven"],
-                        "next": ("Validation passed. Present the gene card now: "
-                                 "one short message with the honest trade-off "
-                                 "the user chose. Do not call more tools."),
-                    }))
+                    # Return the gene card immediately with a templated closing
+                    # note. The card already carries every value + its rationale,
+                    # so a second LLM call just to narrate is redundant — and on
+                    # rate-limited tiers that extra round-trip is what tips a
+                    # compile over the per-minute token budget.
+                    return {"type": "gene_card", "card": card,
+                            "text": _closing_note(card)}
                 else:
                     repair_rounds += 1
                     if repair_rounds > MAX_REPAIR_ROUNDS:
