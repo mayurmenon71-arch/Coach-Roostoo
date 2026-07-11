@@ -29,7 +29,7 @@ import re
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -225,6 +225,19 @@ def compile_health():
 # mount so a missing directory can never crash import (which would take the
 # whole app — and every /api route — down with it).
 _PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
+
+
+# Explicit root route: StaticFiles(html=True) serves /index.html but its
+# bare-"/" index resolution doesn't fire under Vercel's routing, so serve the
+# landing page here. Defined before the mount so it takes priority for GET /.
+@app.get("/")
+def _root():
+    index = os.path.join(_PUBLIC_DIR, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
+    return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+
 if os.path.isdir(_PUBLIC_DIR):
     app.mount("/", StaticFiles(directory=_PUBLIC_DIR, html=True), name="static")
 else:
