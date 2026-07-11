@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler
 
 KEY = os.environ.get("API_KEY")
 API_URL = os.environ.get("API_URL", "https://api.groq.com/openai/v1/chat/completions")
-MODEL = os.environ.get("MODEL", "openai/gpt-oss-20b")
+MODEL = os.environ.get("MODEL", "llama-3.3-70b-versatile")
 
 # ============================================================================
 # LAYER 3 — OUTPUT GUARDRAIL (identical to server.py)

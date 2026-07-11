@@ -86,7 +86,7 @@ class handler(BaseHTTPRequestHandler):
         self._send(200, {
             "ok": True,
             "keySet": bool(os.environ.get("API_KEY")),
-            "model": os.environ.get("MODEL", "openai/gpt-oss-20b"),
+            "model": os.environ.get("MODEL", "llama-3.3-70b-versatile"),
             "validator_selftest": "pass" if selftest else "FAIL",
         })
 

@@ -40,7 +40,7 @@ KEY            = os.environ.get("API_KEY")
 INTERNAL_TOKEN = os.environ.get("COACH_SERVICE_SECRET", "")
 # Groq's OpenAI-compatible chat-completions endpoint.
 API_URL        = os.environ.get("API_URL", "https://api.groq.com/openai/v1/chat/completions")
-MODEL          = os.environ.get("MODEL", "openai/gpt-oss-20b")
+MODEL          = os.environ.get("MODEL", "llama-3.3-70b-versatile")
 
 if not KEY:
     print("\n[Coach Roostoo] No API key set yet.")
