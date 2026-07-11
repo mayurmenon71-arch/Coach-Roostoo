@@ -220,7 +220,16 @@ def compile_health():
 
 
 # Serve the coach UI from ./public (mounted last so /api routes take priority).
-app.mount("/", StaticFiles(directory="public", html=True), name="static")
+# Resolve public/ relative to THIS file, not the process CWD: on Vercel the
+# function runs from /var/task and a bare "public" fails to resolve. Guard the
+# mount so a missing directory can never crash import (which would take the
+# whole app — and every /api route — down with it).
+_PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
+if os.path.isdir(_PUBLIC_DIR):
+    app.mount("/", StaticFiles(directory=_PUBLIC_DIR, html=True), name="static")
+else:
+    print(f"[Coach Roostoo] static dir not found at {_PUBLIC_DIR}; "
+          "serving API only (static assets will 404).")
 
 
 if __name__ == "__main__":
