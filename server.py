@@ -160,13 +160,14 @@ async def coach(request: Request):
             )
 
         if upstream.status_code != 200:
-            detail = upstream.text[:400]
-            print("[coach] LLM provider error:", upstream.status_code, detail)
-            msg = "[error contacting model provider] %s" % detail
+            print("[coach] LLM provider error:", upstream.status_code,
+                  upstream.text[:400])  # detail stays in server logs
+            rate = upstream.status_code == 429 or "rate limit" in upstream.text.lower()
+            msg = ("The coach is briefly rate-limited — try again in a few seconds."
+                   if rate else "The coach couldn't reach the model provider right now.")
             if mode == "text":
                 return PlainTextResponse(msg, status_code=502)
-            return JSONResponse({"error": "error contacting model provider",
-                                 "detail": detail}, status_code=502)
+            return JSONResponse({"error": msg}, status_code=502)
 
         # OpenAI-style response: answer is at choices[0].message.content.
         data = upstream.json()
@@ -186,11 +187,11 @@ async def coach(request: Request):
         return JSONResponse({"Reply": release or "(no response)", "ModelID": MODEL})
 
     except Exception as err:  # noqa: BLE001
-        print("[coach] error:", str(err))
+        print("[coach] error:", str(err))  # detail stays in server logs
         if mode == "text":
-            return PlainTextResponse("[server error] %s" % err, status_code=500)
-        return JSONResponse({"error": "internal server error", "detail": str(err)},
-                            status_code=500)
+            return PlainTextResponse("The coach hit a server error — please try again.",
+                                     status_code=500)
+        return JSONResponse({"error": "internal server error"}, status_code=500)
 
 
 @app.get("/api/health")
@@ -219,12 +220,14 @@ def compile_intent(body: dict):
     try:
         return JSONResponse(_run_create(messages[-20:]))
     except Exception as err:  # noqa: BLE001
-        print("[compile] error:", str(err))
-        return JSONResponse(
-            {"type": "error",
-             "text": "The compiler backend hit an error contacting the model provider.",
-             "detail": str(err)},
-            status_code=502)
+        print("[compile] error:", str(err))  # full detail stays in server logs
+        e = str(err).lower()
+        if any(s in e for s in ("rate limit", "429", "too large", "tpm", "quota")):
+            text = ("The model provider is rate-limiting (free-tier tokens/minute "
+                    "cap). Wait a few seconds and try again, or raise the provider tier.")
+        else:
+            text = "The compiler backend hit an error contacting the model provider."
+        return JSONResponse({"type": "error", "text": text}, status_code=502)
 
 
 @app.get("/api/compile/health")
