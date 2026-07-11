@@ -65,14 +65,16 @@ def _tool_result(call_id, name, payload):
     }
 
 
-def run_create(messages, llm=None):
-    """Run one Create-mode turn.
+def run_create(messages, llm=None, ui_context=None):
+    """Run one unified Coach turn (answers questions OR compiles an agent).
 
     Args:
         messages: [{"role": "user"|"assistant", "content": str}, ...] —
                   the conversation so far (no system message; we own that).
         llm:      injectable chat function (tests pass a fake); defaults to
                   llm_client.call_chat.
+        ui_context: optional plain-text snapshot of the user's current Strategy
+                  Lab config, so "my agent" questions are grounded.
 
     Returns one of:
         {"type": "chat",      "text": str}                       # elicitation / explanation
@@ -82,7 +84,7 @@ def run_create(messages, llm=None):
     if llm is None:
         from .llm_client import call_chat as llm
 
-    convo = [{"role": "system", "content": create_mode_prompt()}]
+    convo = [{"role": "system", "content": create_mode_prompt(ui_context)}]
     convo.extend({"role": m["role"], "content": m["content"]}
                  for m in messages
                  if m.get("role") in ("user", "assistant") and m.get("content"))

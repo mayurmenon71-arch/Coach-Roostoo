@@ -192,11 +192,11 @@
   }
   // Persistent suggested-question strip above the input — rotates after each answer.
   const SUGGEST_POOL = [
+    'Build me an agent that rides big moves but doesn\'t get chopped up',
+    'Make me one that buys dips but never blows up',
     'What does 5-minute frequency mean?',
     'Which reward function should I pick?',
     'What do the indicators do?',
-    'Tune it for volatile markets',
-    'Set me up something safe and steady',
     'How many training steps should I use?',
     'What does the grade mean?',
     'Why did my backtest go stale?',
@@ -308,7 +308,7 @@
       '<div class="chatScroll" id="chatScroll"></div>' +
       suggestRowHtml() +
       '<div class="chatInRow">' +
-      '<input id="chatIn" placeholder="Ask Coach Roostoo — e.g. what does the Sharpe reward do?">' +
+      '<input id="chatIn" placeholder="Ask a question, or describe an agent to build…">' +
       '<button class="chatSend" data-act="chat-send">Send</button>' +
       '</div></div></div>';
   }
@@ -414,24 +414,66 @@
       "- WALLETS/PAYOUTS: non-custodial — Roostoo never holds funds; users sign from their own EVM wallet (MetaMask, Rabby, Coinbase Wallet, WalletConnect) on Base, BNB Chain, or Monad. The connected wallet is both charged for entry and paid out to. Changing it needs email OTP + a 24-hour delay. Roostoo pays payout gas; users pay only the entry fee plus their wallet's confirmation gas.",
     ].join("\n");
   }
-  // Calls the Coach Roostoo serverless backend (/api/coach), which runs the
-  // system prompt + output guardrail server-side. Returns the full plain-text
-  // answer (the serverless function does not stream).
-  async function llmReply(q) {
-    const res = await fetch('/api/coach', {
+  // The user's current Strategy Lab config, as a plain-text line the backend
+  // injects so Coach can ground "my agent" answers in the live on-screen state.
+  function currentConfigContext() {
+    const c = state.cfg;
+    const indicatorsOn = c.feats.filter(Boolean).length;
+    const roster = state.roster.map(sym => {
+      const r = state.results[sym];
+      return sym + 'USDT' + (r ? ' (grade ' + r.verdict.grade + ', avg ' + fmtPct(r.verdict.lastAvg) + (isFresh(sym) ? '' : ', STALE') + ')' : ' (not backtested)');
+    }).join(', ');
+    return 'Decision frequency: ' + c.frequency + '. Training steps: ' +
+      (parseInt(c.training) / 1000) + 'k. Reward function: ' + c.reward +
+      '. Indicators enabled: ' + indicatorsOn + '/12. Asset roster: ' + roster + '.';
+  }
+
+  // Unified Coach backend (/api/compile). ONE endpoint handles both concept/
+  // platform questions AND the build-an-agent flow (classify -> elicit -> gene
+  // card). Returns { type: 'chat'|'gene_card'|'error', text, card? } — JSON even
+  // on non-200 (e.g. a rate-limit 502), so we always parse the body.
+  async function compileReply(history) {
+    const res = await fetch('/api/compile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ system: coachSystemPrompt(), message: q })
+      body: JSON.stringify({ messages: history, context: currentConfigContext() })
     });
-    if (!res.ok) throw new Error('backend not reachable');
-    const text = await res.text();
-    return text.trim();
+    return res.json();
+  }
+
+  // Render a validated gene card (from a gene_card response) as a chat block.
+  function geneCardHtml(card) {
+    const tierBadge = t => '<span class="gcTier gc-' + t + '">' + t + '</span>';
+    let h = '<div class="gcard"><div class="gcHead">' +
+      '<span class="gcName">' + escapeHtml(card.name || 'Agent') + '</span>' +
+      '<span class="gcTag">' + escapeHtml(card.archetype || '') + '</span>' +
+      '<span class="gcDrag">fee drag: ' + escapeHtml(card.fee_drag || '') + '</span></div>';
+    (card.sections || []).forEach(sec => {
+      h += '<div class="gcSec"><h5>' + escapeHtml(sec.block) + '</h5>';
+      (sec.rows || []).forEach(row => {
+        const why = row.rationale || row.locked_reason;
+        h += '<div class="gcRow">' + tierBadge(row.tier) +
+          '<span class="gcLbl">' + escapeHtml(row.label) + '</span>' +
+          '<span class="gcVal">' + escapeHtml(String(row.value)) +
+          (why ? '<span class="gcWhy">' + escapeHtml(why) + '</span>' : '') +
+          '</span></div>';
+      });
+      h += '</div>';
+    });
+    if (card.breakeven && card.breakeven.explanation)
+      h += '<div class="gcBreak"><b>Breakeven</b> — ' + escapeHtml(card.breakeven.explanation) + '</div>';
+    (card.warnings || []).forEach(w => {
+      h += '<div class="gcWarn">⚠ ' + escapeHtml(w.path) + ': ' + escapeHtml(w.message) + '</div>';
+    });
+    return h + '</div>';
   }
 
   function chatSend(q, forceCanned) {
     q = (q || '').trim();
     if (!q || state.chatBusy) return;
+    state.chatHistory = state.chatHistory || [];
     state.chat.push({ role: 'user', html: escapeHtml(q) });
+    state.chatHistory.push({ role: 'user', content: q });
     state.chatBusy = true;
     // adapt the suggestion strip: decay old topics, boost the ones just asked about
     state.asked[q] = true;
@@ -440,10 +482,24 @@
     renderChat();
     if (forceCanned) {
       setTimeout(() => pushBot(formatBotText(canned(q))), 380 + Math.random() * 280);
-    } else {
-      // Try the real Coach Roostoo backend; fall back to canned if unreachable.
-      llmReply(q).then(t => pushBot(formatBotText(t || canned(q)))).catch(() => pushBot(formatBotText(canned(q))));
+      return;
     }
+    // Unified Coach: answers questions AND builds agents. Falls back to canned
+    // replies only if the backend is unreachable.
+    compileReply(state.chatHistory).then(out => {
+      const text = (out && out.text) || '';
+      if (out && out.type === 'gene_card' && out.card) {
+        state.chatHistory.push({ role: 'assistant', content: text || 'Here is your agent.' });
+        pushBot(formatBotText(text) + geneCardHtml(out.card));
+      } else if (out && out.type === 'chat') {
+        state.chatHistory.push({ role: 'assistant', content: text });
+        pushBot(formatBotText(text || canned(q)));
+      } else if (out && out.type === 'error') {
+        pushBot(formatBotText(text || 'Coach is briefly unavailable — try again in a moment.'));
+      } else {
+        pushBot(formatBotText(canned(q)));
+      }
+    }).catch(() => pushBot(formatBotText(canned(q))));
   }
 
   // ── left rail ──────────────────────────────────────────────────────────
@@ -1117,7 +1173,7 @@
   applyTheme(savedTheme);
   state.chat.push({
     role: 'bot',
-    html: 'Hi, I\'m Coach Roostoo. Tune your agent on the left and watch the backtest replay in the middle — ask me about any indicator, the reward function, training steps, or how to think about strategy. I\'ll explain it plainly and tie it to what you\'ve set up.'
+    html: 'Hi, I\'m Coach Roostoo. Two things I can do: <strong>explain</strong> anything here — indicators, the reward function, training steps, fees, competitions — grounded in your current setup; or <strong>build you an agent</strong> — just describe the trader you want ("ride big moves but don\'t get chopped up", "buy dips but never blow up") and I\'ll ask a couple of questions, then hand you a ready-to-train config.'
   });
   rerender(false);
 })();

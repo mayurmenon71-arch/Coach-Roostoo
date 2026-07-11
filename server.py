@@ -217,8 +217,9 @@ def compile_intent(body: dict):
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         return JSONResponse({"type": "error", "text": "Missing messages"}, status_code=400)
+    ui_context = body.get("context")  # optional live Strategy Lab config snapshot
     try:
-        return JSONResponse(_run_create(messages[-20:]))
+        return JSONResponse(_run_create(messages[-20:], ui_context=ui_context))
     except Exception as err:  # noqa: BLE001
         print("[compile] error:", str(err))  # full detail stays in server logs
         e = str(err).lower()
