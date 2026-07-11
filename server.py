@@ -208,7 +208,7 @@ async def health():
 # urllib call inside the orchestrator doesn't stall the event loop.
 
 from coach_compiler import exemplars as _exemplars  # noqa: E402
-from coach_compiler.orchestrator import run_create as _run_create  # noqa: E402
+from coach_compiler.orchestrator import run_coach as _run_coach  # noqa: E402
 from coach_compiler.validator import validate_config as _validate_config  # noqa: E402
 
 
@@ -219,7 +219,9 @@ def compile_intent(body: dict):
         return JSONResponse({"type": "error", "text": "Missing messages"}, status_code=400)
     ui_context = body.get("context")  # optional live Strategy Lab config snapshot
     try:
-        return JSONResponse(_run_create(messages[-20:], ui_context=ui_context))
+        # run_coach routes: pure questions -> cheap Explain path; build intents
+        # -> full Create path (tool schema + exemplars).
+        return JSONResponse(_run_coach(messages[-20:], ui_context=ui_context))
     except Exception as err:  # noqa: BLE001
         print("[compile] error:", str(err))  # full detail stays in server logs
         e = str(err).lower()

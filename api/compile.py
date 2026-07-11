@@ -44,7 +44,7 @@ _IMPORT_OK = True
 _IMPORT_ERROR = None
 try:
     from coach_compiler import exemplars
-    from coach_compiler.orchestrator import run_create
+    from coach_compiler.orchestrator import run_coach
     from coach_compiler.validator import validate_config
 except Exception as _e:  # noqa: BLE001
     _IMPORT_OK = False
@@ -111,9 +111,10 @@ class handler(BaseHTTPRequestHandler):
             return
         # Cap conversation size defensively (stateless contract).
         messages = messages[-20:]
+        ui_context = body.get("context")
 
         try:
-            out = run_create(messages)
+            out = run_coach(messages, ui_context=ui_context)
         except Exception as e:  # noqa: BLE001
             print("[compile] error:", str(e))
             self._send(502, {"type": "error",

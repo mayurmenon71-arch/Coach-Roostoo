@@ -429,5 +429,61 @@ def _classify(intent):
     return None  # vague -> elicit
 
 
+# ── Explain/Create router (keeps Q&A cheap) ─────────────────────────────────
+class TestRouter(unittest.TestCase):
+    def test_is_question_true_for_questions(self):
+        from coach_compiler.orchestrator import is_question
+        for q in ["what does the Sharpe reward do?", "How many training steps?",
+                  "why did my backtest go stale", "explain PPO",
+                  "which reward should I pick?", "difference between Sharpe and Sortino"]:
+            self.assertTrue(is_question(q), q)
+
+    def test_is_question_false_for_builds(self):
+        from coach_compiler.orchestrator import is_question
+        for b in ["make me a good crypto agent", "build me a dip buyer",
+                  "ride big moves on BTC but don't get chopped up",
+                  "buy dips on SOL but never blow up",
+                  "I want an agent that pounces on liquidations",
+                  "something that trades funding spikes"]:
+            self.assertFalse(is_question(b), b)
+
+    def test_router_sends_question_to_explain_no_tools(self):
+        # Explain path must call the LLM with NO tools (the whole cost saving).
+        seen = {}
+        def fake(convo, tools=None):
+            seen["tools"] = tools
+            return _text_turn("Sharpe optimizes risk-adjusted return.")
+        from coach_compiler.orchestrator import run_coach
+        out = run_coach([{"role": "user", "content": "what does the Sharpe reward do?"}],
+                        llm=_Reusable(fake))
+        self.assertEqual(out["type"], "chat")
+        self.assertIsNone(seen["tools"], "Explain path must not send tools")
+
+    def test_router_sends_build_to_create_with_tools(self):
+        seen = {}
+        def fake(convo, tools=None):
+            seen["tools"] = tools
+            return _emit_call(E.CONFIG_A, E.RATIONALE_A, "intraday_momentum")
+        from coach_compiler.orchestrator import run_coach
+        out = run_coach([{"role": "user", "content": E.INTENT_A}], llm=_Reusable(fake))
+        self.assertEqual(out["type"], "gene_card")
+        self.assertTrue(seen["tools"], "Create path must send the tool schema")
+
+    def test_build_conversation_stays_heavy_on_followups(self):
+        # Once building, an elicitation answer (not a question) keeps Create path.
+        from coach_compiler.orchestrator import _wants_build
+        convo = [{"role": "user", "content": "make me a good agent"},
+                 {"role": "assistant", "content": "what should it watch?"},
+                 {"role": "user", "content": "big moves on BTC"}]
+        self.assertTrue(_wants_build(convo))
+
+    def test_pure_qa_conversation_stays_light(self):
+        from coach_compiler.orchestrator import _wants_build
+        convo = [{"role": "user", "content": "what is PPO?"},
+                 {"role": "assistant", "content": "..."},
+                 {"role": "user", "content": "and what does ADX measure?"}]
+        self.assertFalse(_wants_build(convo))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

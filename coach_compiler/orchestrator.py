@@ -13,16 +13,54 @@ conversation each time, exactly like the existing /api/coach contract.
 """
 
 import json
+import re
 
 from . import schema as S
 from .breakeven import breakeven_calc
 from .genecard import build_gene_card
 from .knowledge import retrieve
-from .prompt import create_mode_prompt
+from .prompt import create_mode_prompt, explain_prompt
 from .validator import validate_config
 
 MAX_MODEL_CALLS = 6   # hard ceiling per request
 MAX_REPAIR_ROUNDS = 2  # per Section 8.3 WORKFLOW step 4
+
+# ── Cheap intent router: Q&A vs build ────────────────────────────────────────
+# A pure question goes to the lean, tool-less Explain path (one small call).
+# Anything that describes/asks to build an agent — or any conversation that has
+# already started building — goes to the heavy Create path (tool schema +
+# exemplars + possible repair rounds). This keeps everyday questions cheap.
+_BUILD_RE = re.compile(
+    r"\b(build|make me|make a|create|generate|set (me )?up|spin up|design|"
+    r"configure|i want (a|an|to build|to make)|i'?d like (a|an)|give me (a|an)|"
+    r"an agent that|a bot that|something that)\b", re.I)
+_STRATEGY_RE = re.compile(
+    r"\b(ride|rides|riding|buy (the )?dip|buy dips|dip.?buyer|fade|fades|pounce|"
+    r"scalp|scalper|momentum|mean.?revert|breakout|trend.?follow|panic)\b", re.I)
+_QSTART_RE = re.compile(
+    r"^\s*(what|whats|what's|why|how|hows|how's|which|when|who|whose|whom|where|"
+    r"does|do|did|is|are|am|was|were|can|could|would|should|will|explain|define|"
+    r"describe|tell me|help me understand|difference between|compare)\b", re.I)
+
+
+def is_question(text):
+    """Conservative: only treat clearly-interrogative, non-build text as a
+    question. Build verbs / strategy descriptions are never questions, so the
+    build path is never starved by a misread."""
+    t = (text or "").strip()
+    if _BUILD_RE.search(t) or _STRATEGY_RE.search(t):
+        return False
+    return bool(t.endswith("?") or _QSTART_RE.match(t))
+
+
+def _wants_build(messages):
+    """A conversation is a build conversation if ANY user turn is not a pure
+    question (a build intent, or an elicitation answer mid-build)."""
+    user = [m for m in messages
+            if m.get("role") == "user" and m.get("content")]
+    if not user:
+        return False
+    return any(not is_question(m["content"]) for m in user)
 
 
 # Per-archetype honest trade-off note, appended when the gene card is returned.
@@ -188,3 +226,29 @@ def run_create(messages, llm=None, ui_context=None):
     return {"type": "error",
             "text": "The compiler ran out of turns before producing a valid config.",
             "errors": last_errors}
+
+
+def run_explain(messages, llm=None, ui_context=None):
+    """Lightweight Q&A path: one tool-less call with a lean prompt. No
+    emit_config schema, no few-shot exemplars — a fraction of the tokens of the
+    build path, so questions stay cheap. Returns {"type": "chat", "text": ...}."""
+    if llm is None:
+        from .llm_client import call_chat as llm
+    convo = [{"role": "system", "content": explain_prompt(ui_context)}]
+    # A short tail is enough context for follow-up questions; keeping it small
+    # is the whole point of this path.
+    tail = [{"role": m["role"], "content": m["content"]}
+            for m in messages
+            if m.get("role") in ("user", "assistant") and m.get("content")][-4:]
+    convo.extend(tail)
+    reply = llm(convo)  # NO tools -> guaranteed single call
+    return {"type": "chat",
+            "text": (reply.get("content") or "").strip() or "(no response)"}
+
+
+def run_coach(messages, llm=None, ui_context=None):
+    """Unified entry point. Routes pure-question conversations to the cheap
+    Explain path and anything build-related to the full Create path."""
+    if _wants_build(messages):
+        return run_create(messages, llm=llm, ui_context=ui_context)
+    return run_explain(messages, llm=llm, ui_context=ui_context)

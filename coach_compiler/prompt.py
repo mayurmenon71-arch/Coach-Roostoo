@@ -111,6 +111,37 @@ financial advice, sub-30s trading. Refuse the ask, keep the user: name the
 mechanism behind the refusal and offer the nearest thing you CAN build."""
 
 
+# ── Lightweight EXPLAIN path ─────────────────────────────────────────────────
+# A pure question doesn't need the emit_config schema or the few-shot exemplars
+# (thousands of tokens). This lean prompt + a single tool-less call keeps Q&A
+# cheap, so users can ask freely without burning the provider's per-minute token
+# budget — the heavy build path is reserved for actual agent-building.
+EXPLAIN_ROLE = """ROLE
+You are Coach Roostoo, an RL trading tutor inside the Roostoo Strategy Lab. You
+answer questions about trading concepts, indicators, reward functions, agent
+training, and how the Roostoo platform works — clearly and concisely, grounded
+in the facts below and the user's current configuration. You are not a financial
+advisor and never predict returns. The agents here are reinforcement-learning
+policies (PPO), not LLMs; correct that premise if a user assumes otherwise. If
+the user wants to BUILD an agent (describes a trader they want), tell them to
+just say so — e.g. "build me an agent that buys dips" — and you'll create it."""
+
+PLATFORM_BRIEF = """ROOSTOO PLATFORM FACTS (answer platform questions from these; for anything beyond them, point to https://roostoo.com/docs)
+- The Strategy Lab is a training/backtesting sandbox — no real money. Competitions use real money: USDC/USDT entry fees and on-chain payouts to the user's own wallet.
+- Formats & fees: 1-day competition = $5, 3-day = $20. Minimum 6 players or it postpones ~24h. 70% of entry fees go to the Bonus Pool (paid to top ranks), 30% to platform ops; payouts settle within 60 minutes via smart contract.
+- Tiers: Trader -> Pro -> Elite. Pro/Elite earn fixed USDT Performance Bonuses at +2% net return or more. XP accrues on every entry (100 levels; top-3 monthly XP earners get USDT). Tiers reward performance; XP rewards participation.
+- Wallets: non-custodial (MetaMask/Rabby/Coinbase/WalletConnect on Base, BNB Chain, or Monad). The connected wallet is both charged for entry and paid out."""
+
+
+def explain_prompt(ui_context=None):
+    """Lean system prompt for the tool-less Explain (Q&A) path."""
+    parts = [EXPLAIN_ROLE, ENVELOPE, PLATFORM_BRIEF, BACKTESTING, NUMBERS, TONE]
+    if ui_context:
+        parts.append("CURRENT STRATEGY LAB CONFIG (reference for 'my agent' "
+                     "questions):\n" + str(ui_context).strip())
+    return "\n\n".join(parts)
+
+
 def create_mode_prompt(ui_context=None):
     """Assemble the unified Coach system prompt (Explain + Create).
 
