@@ -29,7 +29,8 @@ import re
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse
+from fastapi.responses import (PlainTextResponse, JSONResponse, FileResponse,
+                               RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -56,17 +57,6 @@ SYSTEM_PROMPT = (
 )
 
 app = FastAPI()
-
-
-# TEMP DIAGNOSTIC: surface the exact path FastAPI sees, so we can tell why the
-# bare "/" request isn't matching the root route under Vercel's routing.
-@app.middleware("http")
-async def _debug_path(request, call_next):
-    resp = await call_next(request)
-    resp.headers["x-debug-path"] = repr(request.scope.get("path"))
-    resp.headers["x-debug-rawpath"] = repr(request.scope.get("raw_path"))
-    return resp
-
 
 # ============================================================================
 # LAYER 3 — OUTPUT GUARDRAIL (provider-agnostic — screens text)
@@ -243,10 +233,13 @@ _PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 # landing page here. Defined before the mount so it takes priority for GET /.
 @app.get("/")
 def _root():
+    # On Render the file is on disk → serve it directly (clean URL). On Vercel
+    # public/ is served by the CDN and isn't in the function bundle, so fall
+    # back to redirecting to /index.html, which the CDN serves.
     index = os.path.join(_PUBLIC_DIR, "index.html")
     if os.path.isfile(index):
         return FileResponse(index)
-    return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return RedirectResponse(url="/index.html")
 
 
 if os.path.isdir(_PUBLIC_DIR):
