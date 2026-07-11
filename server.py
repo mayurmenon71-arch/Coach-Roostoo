@@ -111,27 +111,34 @@ async def coach(request: Request):
 
     body = await request.json()
 
-    # ── Parse new Go contract: PascalCase keys ────────────────────────────────
-    # Go sends: { "Messages": [{"Role": "user", "Content": "...", "Ts": ...}],
-    #             "UserContext": {"UserId": 123} }
-    incoming     = body.get("Messages", [])
-    # user_context = body.get("UserContext", {})  # reserved for future use
+    # Two supported contracts:
+    #   * This app's UI (public/assets/app.js): {"system": "...", "message": "..."}
+    #     -> respond with PLAIN TEXT (app.js reads res.text()).
+    #   * Go backend: {"Messages": [{"Role","Content"}], "UserContext": {...}}
+    #     -> respond with JSON {"Reply", "ModelID"}.
+    frontend_message = body.get("message")
+    go_messages = body.get("Messages", [])
 
-    if not incoming:
-        return JSONResponse({"error": "Missing Messages"}, status_code=400)
+    if frontend_message:
+        mode = "text"
+        messages = []
+        if body.get("system"):
+            messages.append({"role": "system", "content": body["system"]})
+        messages.append({"role": "user", "content": frontend_message})
+    elif go_messages:
+        mode = "json"
+        messages = [
+            {"role": m["Role"], "content": m["Content"]}
+            for m in go_messages
+            if m.get("Role") and m.get("Content")
+        ]
+        if not messages or messages[0]["role"] != "system":
+            messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+    else:
+        return JSONResponse({"error": "Missing message"}, status_code=400)
+
     if not KEY:
         return JSONResponse({"error": "Server has no API key configured."}, status_code=500)
-
-    # Convert PascalCase Go message objects → snake_case for the LLM API.
-    messages = [
-        {"role": m["Role"], "content": m["Content"]}
-        for m in incoming
-        if m.get("Role") and m.get("Content")
-    ]
-
-    # Prepend system prompt if the history doesn't already start with one.
-    if not messages or messages[0]["role"] != "system":
-        messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
 
     payload = {
         "model": MODEL,
@@ -153,12 +160,16 @@ async def coach(request: Request):
             )
 
         if upstream.status_code != 200:
-            print("[coach] LLM provider error:", upstream.status_code, upstream.text[:300])
-            return JSONResponse({"error": "error contacting model provider"}, status_code=502)
+            detail = upstream.text[:400]
+            print("[coach] LLM provider error:", upstream.status_code, detail)
+            msg = "[error contacting model provider] %s" % detail
+            if mode == "text":
+                return PlainTextResponse(msg, status_code=502)
+            return JSONResponse({"error": "error contacting model provider",
+                                 "detail": detail}, status_code=502)
 
         # OpenAI-style response: answer is at choices[0].message.content.
         data = upstream.json()
-        full = ""
         try:
             full = data["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError):
@@ -168,15 +179,18 @@ async def coach(request: Request):
         release = full.strip()
         if crosses_line(release):
             print("[coach][guardrail] directive-on-real-asset detected — replacing response.")
-            print("[coach][guardrail] original (first 200 chars):", release[:200])
             release = SAFE_REDIRECT
 
-        # Return JSON so Go can parse Reply + ModelID.
+        if mode == "text":
+            return PlainTextResponse(release or "(no response)")
         return JSONResponse({"Reply": release or "(no response)", "ModelID": MODEL})
 
     except Exception as err:  # noqa: BLE001
         print("[coach] error:", str(err))
-        return JSONResponse({"error": "internal server error"}, status_code=500)
+        if mode == "text":
+            return PlainTextResponse("[server error] %s" % err, status_code=500)
+        return JSONResponse({"error": "internal server error", "detail": str(err)},
+                            status_code=500)
 
 
 @app.get("/api/health")
@@ -208,7 +222,8 @@ def compile_intent(body: dict):
         print("[compile] error:", str(err))
         return JSONResponse(
             {"type": "error",
-             "text": "The compiler backend hit an error contacting the model provider."},
+             "text": "The compiler backend hit an error contacting the model provider.",
+             "detail": str(err)},
             status_code=502)
 
 
