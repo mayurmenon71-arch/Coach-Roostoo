@@ -1,7 +1,8 @@
 {
   "functions": {
     "server.py": {
-      "includeFiles": "{public,coach_compiler}/**"
+      "includeFiles": "{public,coach_compiler}/**",
+      "maxDuration": 60
     }
   },
   "rewrites": [

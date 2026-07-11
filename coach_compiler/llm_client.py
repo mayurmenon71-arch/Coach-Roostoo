@@ -9,8 +9,14 @@ repo.
 
 import json
 import os
+import re
+import time
 import urllib.error
 import urllib.request
+
+_RETRY_RE = re.compile(r"try again in ([\d.]+)\s*s", re.I)
+MAX_RATE_RETRIES = 2       # extra attempts after a 429
+MAX_RETRY_SLEEP = 9.0      # cap per-wait so a request never hangs too long
 
 DEFAULT_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_MODEL = "llama-3.3-70b-versatile"
@@ -54,17 +60,27 @@ def call_chat(messages, tools=None, temperature=0.2, max_tokens=1400):
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
+    # On a 429 (per-minute token cap briefly exceeded) the provider tells us how
+    # long to wait — honor it and retry so transient bursts resolve invisibly
+    # instead of surfacing an error to the user.
+    for attempt in range(MAX_RATE_RETRIES + 1):
         try:
-            detail = e.read()[:300].decode("utf-8", "replace")
-        except Exception:
-            detail = ""
-        raise LLMError("provider error %s: %s" % (e.code, detail))
-    except Exception as e:
-        raise LLMError("provider unreachable: %s" % (e,))
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read()[:400].decode("utf-8", "replace")
+            except Exception:
+                detail = ""
+            if e.code == 429 and attempt < MAX_RATE_RETRIES:
+                m = _RETRY_RE.search(detail)
+                wait = min(float(m.group(1)) + 0.4, MAX_RETRY_SLEEP) if m else 3.0
+                time.sleep(wait)
+                continue
+            raise LLMError("provider error %s: %s" % (e.code, detail))
+        except Exception as e:
+            raise LLMError("provider unreachable: %s" % (e,))
 
     try:
         return data["choices"][0]["message"]
