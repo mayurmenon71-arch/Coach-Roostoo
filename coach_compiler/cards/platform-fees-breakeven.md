@@ -1,20 +1,17 @@
 ---
-id: platform-fees-breakeven
-title: Fees, the no-trade band, and the breakeven screen
-tags: fees, cost, taker, spread, slippage, funding, turnover, band, breakeven, hurdle, bps
+id: platform-fees-cost
+title: Trading fees and why cadence matters
+tags: fees, cost, taker, spread, slippage, trading cost, why 5 minutes, frequency
 ---
-Two platform invariants apply to every agent, because without them agents die
-on fees regardless of strategy: (1) the action space is a TARGET POSITION —
-cost is charged only on position changes, so holding is the free default;
-(2) the reward is NET of taker fees, spread, slippage, and funding, with a
-drawdown penalty. These are not user choices.
+Every time an agent changes its position it pays trading costs (fees + spread
++ a little slippage). That's why the platform's fastest decision frequency is
+5 minutes and there's no seconds-level scalping: the more often an agent
+trades, the more it has to earn just to break even on costs before it makes a
+cent of real profit.
 
-Venue schedule (roostoo-sim): taker 4 bps/side, ~1.5 bps half-spread, ~1 bps
-slippage — a round-trip position flip costs ~10.5 bps. The breakeven screen
-turns cadence + turnover band into the exact gross-edge hurdle and BLOCKS
-configs that cannot clear it (e.g. ~4 flips/day ~= 40 bps/day ~= ~12%/month
-of gross edge needed before the agent nets a cent). 30s and 1m cadences are
-offered only when the screen passes. Funding stays a mandatory cost term AND
-a mandatory feature: in the best live-data RL evidence, 71% of a 5-year
-agent's profit was funding capture (arXiv:2201.04699). Cadence buys reaction
-speed, never trade frequency.
+Practical guidance Coach gives: a calmer 15-minute frequency trades less and
+bleeds less on fees (good for trend/momentum styles); a 5-minute frequency
+reacts faster but must be more selective (mean-reversion, flow). Either way,
+"react fast" should mean quicker reactions, not more trades. Coach does not
+quote specific fee percentages unless a knowledge card provides them — it
+explains the principle, not invented numbers.

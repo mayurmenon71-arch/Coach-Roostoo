@@ -445,9 +445,8 @@
   function geneCardHtml(card) {
     const tierBadge = t => '<span class="gcTier gc-' + t + '">' + t + '</span>';
     let h = '<div class="gcard"><div class="gcHead">' +
-      '<span class="gcName">' + escapeHtml(card.name || 'Agent') + '</span>' +
-      '<span class="gcTag">' + escapeHtml(card.archetype || '') + '</span>' +
-      '<span class="gcDrag">fee drag: ' + escapeHtml(card.fee_drag || '') + '</span></div>';
+      '<span class="gcName">' + escapeHtml(card.name || 'Agent') + '</span></div>';
+    if (card.blurb) h += '<div class="gcBlurb">' + escapeHtml(card.blurb) + '</div>';
     (card.sections || []).forEach(sec => {
       h += '<div class="gcSec"><h5>' + escapeHtml(sec.block) + '</h5>';
       (sec.rows || []).forEach(row => {

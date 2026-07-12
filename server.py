@@ -236,7 +236,7 @@ def compile_intent(body: dict):
 @app.get("/api/compile/health")
 def compile_health():
     selftest = all(_validate_config(cfg)["valid"]
-                   for _, _, _, cfg, _, _, _ in _exemplars.WORKED_EXAMPLES)
+                   for _, _, _, cfg, _, _ in _exemplars.WORKED_EXAMPLES)
     return {"ok": True, "model": MODEL, "keySet": bool(KEY),
             "validator_selftest": "pass" if selftest else "FAIL"}
 

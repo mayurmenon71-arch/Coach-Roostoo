@@ -1,24 +1,18 @@
 ---
 id: archetype-intraday-momentum
-title: Intraday momentum / trend
-tags: momentum, trend, ride, big moves, ema, adx, directional
+title: Momentum agent
+tags: momentum, trend, ride, big moves, ema, breakout, directional, trend follow
 ---
-Ride directional moves lasting hours to days; lose small in chop, win big when
-the move runs. Fixed-rule twin (and benchmark): "Long when EMA(20) > EMA(100)
-on 5m bars and ADX > 25; exit on cross-down; 2xATR trailing stop."
+A momentum agent rides sustained directional moves and sits out the chop —
+small losses when the market is range-bound, bigger wins when a move runs.
 
-Sees: multi-horizon returns (ROC), EMA-cross distances, MACD histogram, ADX,
-ATR, Donchian distance, trend-vs-chop regime label, position context,
-competition time-remaining. Wants: PnL or Sortino flavor; moderate drawdown
-penalty; hold bonus weighted up; strong turnover band — trend agents should
-trade rarely even when deciding every 5 minutes. Acts: target position
-[-1,+1], wide no-trade band, minimum holding 2-12h, vol-scaled sizing.
-Cadence: 5-15m decisions; holds hours to competition end. Fee drag: LOW.
+In Roostoo v1 terms, a good momentum setup usually means: a calmer 15-minute
+decision frequency (so it isn't whipsawed by every wiggle), a Sortino reward
+(rewards upside, punishes downside swings), a wider stop-loss so a trend has
+room to breathe, and a higher take-profit so winners can run. It still reads
+all 8 indicators (RSI, ATR, VWAP, MACD, StochRSI, EMA Crossover, Bollinger,
+OBV) — the trend-ish ones (EMA crossover, MACD) do the heavy lifting.
 
-What RL adds over the rule: learned, volatility-conditional entry/exit
-thresholds; continuous sizing scaled to trend strength; learned suppression
-of entries in chop. Failure modes: whipsaw churn in range-bound markets
-(guard: wide band + regime feature + turnover penalty); late entries and
-give-back at reversals (guard: platform trailing stop). Watch for the
-leveraged-long impostor — a maxed-long degenerate policy looks like a great
-momentum agent in a bull window; the fidelity audit catches it.
+Honest trade-off: momentum agents underperform in flat, choppy markets — they
+need a real move to work. It's long-only, so it profits from up-moves and
+sits in cash otherwise.

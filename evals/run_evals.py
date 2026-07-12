@@ -113,7 +113,7 @@ def run_golden(llm=None):
             rows.append(row)
             continue
 
-        got = card["archetype"]
+        got = (card.get("classification") or {}).get("archetype")
         arch_total += 1
         ok_arch = got == c["expect_archetype"] or got == c.get("expect_alt_archetype")
         if ok_arch:

@@ -1,21 +1,24 @@
 ---
 id: reward-terms
-title: Reward terms — what each knob does
-tags: reward, sharpe, sortino, calmar, cvar, drawdown, lambda, hold bonus, penalty, turnover band
+title: Reward metrics — what each one optimizes
+tags: reward, sharpe, sortino, calmar, entropy, volatility penalty, risk adjusted
 ---
-Flavor: PnL (raw return), Sharpe (return per unit total vol), Sortino
-(penalizes downside vol only — fits trend riders with skewed payoffs),
-Calmar (return over max drawdown), CVaR(alpha) (optimizes the loss tail
-explicitly — fits fat-tailed event trades). Locked add-ons for everyone:
-fee/funding-inclusive PnL and a drawdown penalty.
+The reward metric is what the agent is trained to maximize — it shapes the
+agent's whole personality. You pick exactly one. The five options in Roostoo
+v1:
 
-Coach-tunable within ranges: lambda_dd 0.05-0.50 (drawdown aversion — "never
-blows up" maps high); turnover_band [lo, hi] with zero penalty inside the
-band and lambda_band outside (the band is measured as expected position
-change per hour — the ceiling implies a concrete number of position flips
-per day, which the breakeven screen prices in bps); hold_bonus 0-0.05 (paid
-only while profitable and low-drawdown — "don't get chopped up" maps high);
-per_trade_penalty 0-0.002 (makes each trade cost something extra — breakout
-agents use it because true breakouts are rare); averaging_down_penalty
-(asymmetric penalty on adding to losers — mandatory for mean reversion).
-The user says a feeling; the compiler makes it mechanical.
+- Sharpe Ratio — return per unit of total volatility. A balanced, all-round
+  risk-adjusted choice.
+- Sortino Ratio — like Sharpe but only penalizes DOWNSIDE volatility, so it
+  doesn't punish big up-moves. Good for trend/momentum agents that want to let
+  winners run.
+- Calmar Ratio — return relative to the worst drawdown. Tail-aware; suits
+  spiky, event-driven styles that must survive sharp reversals.
+- Entropy — rewards keeping the policy varied/exploratory rather than
+  collapsing onto one repeated bet; useful against over-fitting to one pattern.
+- Volatility Penalty — directly penalizes volatility, producing the calmest,
+  most drawdown-averse behavior. The natural pick for "steady" / "never blow
+  up" agents.
+
+There are no separate weight knobs to tune — you choose the metric and the RL
+training does the rest.

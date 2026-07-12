@@ -82,7 +82,7 @@ class handler(BaseHTTPRequestHandler):
                              "diagnostic": _diagnostic()})
             return
         selftest = all(validate_config(cfg)["valid"]
-                       for _, _, _, cfg, _, _, _ in exemplars.WORKED_EXAMPLES)
+                       for _, _, _, cfg, _, _ in exemplars.WORKED_EXAMPLES)
         self._send(200, {
             "ok": True,
             "keySet": bool(os.environ.get("API_KEY")),

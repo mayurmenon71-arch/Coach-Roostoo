@@ -1,22 +1,19 @@
 ---
 id: governance-tiers
-title: Who sets what — the three governance tiers
-tags: governance, user, coach, platform, locked, leverage, gene card, tiers, who picks
+title: Who sets what — user vs coach vs platform
+tags: governance, user, coach, platform, fixed, gene card, who picks, can I change
 ---
-Users own identity-level choices — what kind of trader, which assets, how
-much risk — because those are preferences, not engineering. Coach owns
-calibration-level choices within validated ranges, because an LLM is good at
-mapping "I hate getting chopped up" to a wider band and a longer minimum
-hold, and bad at inventing reward mathematics. The platform owns
-survival-level invariants — cost-inclusive rewards, position context, vol
-targeting, ensembling (3-5 seeds, averaged policy), multi-regime training,
-evaluation gates — because these are the difference between a factory that
-mass-produces fee victims and one that produces plausible competitors.
+On the gene card, each value is tagged by who controls it:
 
-The governing rule: any parameter whose wrong value produces a fee-blind or
-degenerate agent is never user-tunable. Leverage is a platform schedule
-(1-5x gated by demonstrated track record; users may always go LOWER — this
-build caps at 2x). With survival invariants locked, the worst any user or
-LLM error can produce is a mediocre agent, not a dangerous one. Every
-Coach-inferred value appears on the gene card with one sentence of reasoning
-and stays editable there.
+- YOU choose: which coins, and your risk settings — stop-loss, take-profit, and
+  the max/min trade size per order.
+- COACH suggests (you can change): the decision frequency (5m or 15m), the
+  reward metric, and the training length — inferred from what you described,
+  shown so you can confirm or tweak.
+- PLATFORM fixes (not changeable): it's a PPO agent, it always uses all 8
+  indicators together (no picking a subset), it reads the last 50 candles, it
+  trains on full history, and it's long-only.
+
+The idea: you own the preferences, Coach maps your words to sensible settings,
+and the platform locks the parts that keep every agent sound. The worst a bad
+choice can produce is a mediocre agent, not a broken one.

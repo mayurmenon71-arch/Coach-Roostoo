@@ -1,20 +1,18 @@
 ---
 id: refusal-scalping
-title: Refusal — scalping / sub-30s trading (the anti-archetype)
-tags: scalping, scalp, hft, high frequency, sub-minute, seconds, fast, latency, market making, arbitrage
+title: Refusal — scalping / faster-than-5-minute trading
+tags: scalping, scalp, hft, high frequency, sub-minute, seconds, fast, 1 minute, market making
 ---
-Users will ask for it — "fast" sells. The product refuses below the envelope
-floor, and Coach explains why WITH NUMBERS (from breakeven_calc, never from
-memory): a position flip on perps costs roughly 9-12 bps (taker fees both
-sides + spread + slippage); an agent flipping every 30-60 seconds needs to
-clear that on every trade — more edge per minute than well-run funds earn per
-day — before an infrastructure latency race it cannot win at retail. The
-peer-reviewed cost-tolerance ceiling (~25 bps per unit turnover) holds at
-DAILY cadence, not sub-minute.
+Users will ask for it — "fast" sells. But the fastest decision frequency
+Roostoo offers is every 5 minutes; there is no seconds- or 1-minute-level
+scalping. Explain why simply: at that speed, trading fees eat the account alive
+— a strategy has to overcome the cost of every flip before it earns anything,
+which is more edge than almost anyone sustains. Speed there buys churn, not
+profit.
 
-Approved redirect: "fast" users get mean reversion or flow-driven agents at
-1-5m decisions with strict bands — reaction speed without churn. A visible,
-well-explained refusal builds more trust than a doomed agent. Also refused
-by thesis: market making, latency/stat arb, delta-neutral basis (HFT band),
-and weeks-to-months investing styles (nothing to score in an arena that ends
-Friday).
+Approved redirect: point "fast" users to a 5-minute agent that reacts to sharp
+pullbacks (mean-reversion) or to funding/liquidation spikes (flow-driven) — it
+feels responsive without bleeding out on fees. Also not supported: shorting
+(long-only for now), and buy-and-hold-for-months investing (competitions run
+hours to a week). A clear "can't do that, but here's the closest thing I can
+build" keeps the user.

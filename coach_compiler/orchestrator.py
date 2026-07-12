@@ -16,7 +16,6 @@ import json
 import re
 
 from . import schema as S
-from .breakeven import breakeven_calc
 from .genecard import build_gene_card
 from .knowledge import retrieve
 from .prompt import create_mode_prompt, explain_prompt
@@ -65,32 +64,28 @@ def _wants_build(messages):
 
 # Per-archetype honest trade-off note, appended when the gene card is returned.
 # Templated (not a second LLM call) to keep a compile to a single round-trip.
+# Short, plain-language trade-off note per personality (no jargon, no math).
 _ARCHETYPE_NOTE = {
-    "intraday_momentum": "Momentum agents lose small in chop and win big when a "
-        "move runs — expect flat, patient stretches in range-bound markets.",
-    "mean_reversion": "This fades overextensions, so by design it underperforms "
-        "in strong trends — that's the trade-off you chose. Its fast cadence "
-        "only passed because the turnover band clears the fee screen.",
-    "breakout": "True breakouts are rare, so it trades seldom and takes small "
-        "losses on false breaks to catch the occasional big expansion.",
-    "flow_driven": "Flow events are rare and fat-tailed, so this agent carries "
-        "higher overfit risk — its live, cross-competition record matters far "
-        "more than any single backtest.",
+    "intraday_momentum": "It rides sustained moves and sits out the chop, so "
+        "expect flat, patient stretches when the market is range-bound.",
+    "mean_reversion": "It buys pullbacks expecting a bounce, so by design it "
+        "struggles in strong one-way trends — that's the trade-off you picked.",
+    "breakout": "Real breakouts are rare, so it trades seldom and takes small "
+        "losses on false starts to catch the occasional big move.",
+    "flow_driven": "It reacts to funding and liquidation spikes, which are rare "
+        "events — so its live track record matters more than any one backtest.",
 }
 
 
 def _closing_note(card):
-    arch = card.get("archetype")
-    note = _ARCHETYPE_NOTE.get(arch, "")
-    be = (card.get("breakeven") or {}).get("explanation", "")
-    parts = ["Here's **%s** — a %s agent." % (card.get("name"), arch.replace("_", " "))]
+    arch = (card.get("classification") or {}).get("archetype")
+    parts = ["Here's **%s** — %s."
+             % (card.get("name"), card.get("blurb", "your agent"))]
+    note = _ARCHETYPE_NOTE.get(arch)
     if note:
         parts.append(note)
-    if be:
-        parts.append(be)
-    parts.append("Every value above is checked by a deterministic validator and "
-                 "the fee-breakeven screen — but the live arena on unseen data is "
-                 "the real test, not this preview.")
+    parts.append("A strong backtest can overfit, so treat this as a starting "
+                 "point — the live arena on unseen data is the real test.")
     return " ".join(parts)
 
 
@@ -165,15 +160,6 @@ def run_create(messages, llm=None, ui_context=None):
                     "cards": retrieve(args.get("query", ""), args.get("k", 3)),
                 }))
 
-            elif name == "breakeven_calc":
-                try:
-                    convo.append(_tool_result(call_id, name, breakeven_calc(
-                        args.get("decision_interval"),
-                        args.get("turnover_band_hi", 0),
-                    )))
-                except (ValueError, KeyError) as e:
-                    convo.append(_tool_result(call_id, name, {"error": str(e)}))
-
             elif name == "emit_config":
                 config = args.get("config") or {}
                 rationale = args.get("rationale") or {}
@@ -184,7 +170,7 @@ def run_create(messages, llm=None, ui_context=None):
                 if verdict["valid"]:
                     card = build_gene_card(
                         verdict["config"], rationale, classification,
-                        verdict["breakeven"], verdict["warnings"],
+                        verdict["warnings"],
                     )
                     # Return the gene card immediately with a templated closing
                     # note. The card already carries every value + its rationale,

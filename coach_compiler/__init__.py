@@ -1,21 +1,20 @@
 """
-Coach Roostoo intent compiler — "Rules to Rewards" (v1.2) implementation.
+Coach Roostoo intent compiler — scoped to the v1 parameter registry.
 
-The LLM translates, RL learns, the arena proves. This package is the
-translation layer: a compiler from conversational intent to a validated
-agent config ("gene card"). The LLM selects values inside a typed schema;
-everything load-bearing (validation, breakeven math, platform locks) is
-plain deterministic Python.
+A compiler from conversational intent to a validated v1 agent config ("gene
+card"). The LLM selects values inside a typed schema of ONLY the parameters
+the platform actually exposes; everything load-bearing (validation, routing)
+is plain deterministic Python. The four strategy "personalities" (archetypes)
+are an internal classification aid, not stored parameters.
 
 Modules
-  schema.py       Step 1 — full parameter set, governance tiers, tool defs
-  breakeven.py    Step 2 — the fee-hurdle calculator (the gate that matters)
-  validator.py    Step 2 — deterministic range / coherence / archetype checks
-  knowledge.py    Step 2 — retrieve() over the versioned knowledge cards
-  prompt.py       Step 3 — the Create-mode system prompt (Section 8.3)
-  exemplars.py    Step 5 — few-shot worked examples + negative exemplars
-  genecard.py     Step 6 — config + rationale + tiers -> renderable gene card
-  orchestrator.py the Create loop: classify -> elicit -> emit -> validate -> card
+  schema.py       the v1 parameter registry, governance tiers, tool defs
+  validator.py    deterministic range / enum / coherence checks
+  knowledge.py    retrieve() over the versioned knowledge cards
+  prompt.py       unified Coach prompt (Explain + Create) + lean Explain prompt
+  exemplars.py    few-shot worked examples + negative exemplars (v1 configs)
+  genecard.py     config + rationale + tiers -> renderable gene card
+  orchestrator.py router (run_coach) + the Create loop and the Explain path
   llm_client.py   OpenAI-compatible chat call with tools (stdlib urllib)
 """
 
