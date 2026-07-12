@@ -215,13 +215,18 @@ def validate_config(config):
     else:
         rlo, rhi = float(rng[0]), float(rng[1])
         cap = spec["position_cap"]
-        if not (-1.0 <= rlo <= 0.0):
+        if S.LONG_ONLY:
+            if rlo != 0.0:
+                ctx.err("action.range[0]",
+                        "shorting isn't supported on the platform yet — long-only, "
+                        "so the lower bound must be 0")
+        elif not (-1.0 <= rlo <= 0.0):
             ctx.err("action.range[0]", "lo must be in [-1, 0]")
         if not (0.0 < rhi <= 1.0):
             ctx.err("action.range[1]", "hi must be in (0, 1]")
         if abs(rlo) > cap or rhi > cap:
             ctx.err("action.range",
-                    "%s positions are capped at ±%g of max" % (archetype, cap))
+                    "%s positions are capped at %g of max" % (archetype, cap))
 
     bw = act.get("band_width")
     if bw not in S.BAND_WIDTHS:

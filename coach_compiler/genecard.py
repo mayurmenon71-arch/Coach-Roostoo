@@ -134,8 +134,11 @@ def build_gene_card(config, rationale, classification, breakeven, warnings):
                             S.PLATFORM, locked_reason=_LOCK_REASONS["reward.fee_term"]))
     sections.append({"block": "Reward (what it wants)", "rows": reward_rows})
 
+    _rng = act["range"]
+    _rng_txt = ("long-only, up to %g%% of max" % (_rng[1] * 100)
+                if _rng[0] == 0 else "[%g, %g]" % tuple(_rng))
     action_rows = [
-        _row("action.range", "Position range", "[%g, %g]" % tuple(act["range"]),
+        _row("action.range", "Position range", _rng_txt,
              S.USER, rationale=r("action.range")),
         _row("action.band_width", "No-trade band", act["band_width"], S.COACH,
              rationale=r("action.band_width")),

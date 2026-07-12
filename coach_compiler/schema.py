@@ -141,6 +141,11 @@ PLATFORM_LOCKED = {
 MAX_LEVERAGE_SCHEDULE = 5
 MAX_LEVERAGE_EFFECTIVE = 2   # users/Coach may only go lower
 
+# Platform capability: only LONG positions are supported right now (no
+# shorting). Every action.range lower bound must be 0. Flip to False when the
+# platform enables shorting, and the validator/prompt/elicitation follow.
+LONG_ONLY = True
+
 # ── Coach-tier ranges (global envelope; archetype tables narrow them) ────────
 COACH_RANGES = {
     "lambda_dd": (0.05, 0.50),
@@ -326,7 +331,7 @@ def default_config_for(archetype, assets=None, name=None):
         reward["averaging_down_penalty"] = 0.05
 
     action = {
-        "range": [-cap, cap],
+        "range": [0, cap],  # long-only: no shorting on the platform yet
         "band_width": spec["default_band_width"],
         "min_holding": minutes_to_duration(spec["min_holding_min"][2]),
         "max_leverage": spec["default_leverage"],
@@ -384,7 +389,7 @@ def build_emit_config_tool():
             "description": (
                 "Submit a complete agent configuration for validation. Call this "
                 "ONLY after intent is classified and the five elicitation slots "
-                "(tempo, risk, direction, story, assets) are answered or "
+                "(tempo, risk, story, assets) are answered or "
                 "defaulted. Every value must sit inside the schema ranges; the "
                 "deterministic validator rejects anything outside them."
             ),
@@ -497,8 +502,8 @@ def build_emit_config_tool():
                                 "properties": {
                                     "range": {
                                         "type": "array", "minItems": 2, "maxItems": 2,
-                                        "items": {"type": "number", "minimum": -1, "maximum": 1},
-                                        "description": "[lo, hi]; lo in [-1,0], hi in (0,1]; long-only = lo 0",
+                                        "items": {"type": "number", "minimum": 0, "maximum": 1},
+                                        "description": "[lo, hi]. LONG-ONLY platform: lo MUST be 0 (no shorting yet); hi in (0,1], capped per archetype",
                                     },
                                     "band_width": {"type": "string", "enum": list(BAND_WIDTHS)},
                                     "min_holding": {"type": "string",

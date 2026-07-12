@@ -202,6 +202,11 @@ class TestValidatorRejections(unittest.TestCase):
         self.assertFalse(v["valid"])
         self.assertTrue(any("action.range" in e["path"] for e in v["errors"]))
 
+    def test_rejects_short_position_long_only_platform(self):
+        # Shorting isn't supported yet: any negative lower bound is rejected.
+        self._reject(lambda c: c["action"].__setitem__("range", [-1, 1]),
+                     "action.range")
+
     def test_rejects_zero_turnover_band_as_degenerate(self):
         cfg = copy.deepcopy(E.CONFIG_A)
         cfg["reward"]["turnover_band"] = [0.0, 0.0]

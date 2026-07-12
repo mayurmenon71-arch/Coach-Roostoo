@@ -34,7 +34,7 @@ CONFIG_A = {
     "reward": {"flavor": "sortino", "lambda_dd": 0.15,
                "turnover_band": [0.02, 0.10], "lambda_band": 0.08,
                "hold_bonus": 0.03, "per_trade_penalty": 0.0008},
-    "action": {"range": [-1, 1], "band_width": "wide", "min_holding": "4h",
+    "action": {"range": [0, 1], "band_width": "wide", "min_holding": "4h",
                "max_leverage": 2},
     "risk": {"stop_loss": 0.08, "take_profit": 0.25},
     "training": {"steps": 500000},
@@ -107,7 +107,7 @@ CONFIG_C = {
     "reward": {"flavor": "cvar", "cvar_alpha": 0.05, "lambda_dd": 0.30,
                "turnover_band": [0.02, 0.15], "lambda_band": 0.10,
                "per_trade_penalty": 0.0010},
-    "action": {"range": [-0.75, 0.75], "band_width": "signal_paced",
+    "action": {"range": [0, 0.75], "band_width": "signal_paced",
                "min_holding": "1h", "max_leverage": 2},
     "risk": {"stop_loss": 0.05, "take_profit": 0.15},
     "training": {"steps": 600000, "augmentation": "block_bootstrap"},
@@ -171,14 +171,15 @@ def exemplar_block():
     parts.append(
         "--- Exemplar D (clear style, missing details -> elicit cleanly, no jargon) ---\n"
         "USER: give me a momentum based strategy\n"
-        "[internal: classifies as intraday_momentum, but assets/risk/direction "
-        "are unknown — ask, don't emit yet]\n"
+        "[internal: classifies as intraday_momentum, but assets/risk are "
+        "unknown — ask, don't emit yet. Do NOT ask about direction: the "
+        "platform is long-only.]\n"
         "ASSISTANT: Nice — a momentum agent rides sustained moves and sits out "
         "the chop. To shape yours I need a few things: (1) which coins? (2) how "
         "hard should it chase a move — react within a minute, or a calmer "
         "5-15 minute pulse? (3) what's the most it could be down before you'd "
-        "want it stopped? (4) long-only, or allowed to short too? Everything "
-        "else I'll set to sensible defaults and show you on the gene card.")
+        "want it stopped? Everything else I'll set to sensible defaults and "
+        "show you on the gene card.")
     # Vague-intent exemplar — no archetype known yet, elicit the story first.
     parts.append(
         "--- Exemplar E (vague intent -> elicit, do NOT emit yet) ---\n"
