@@ -66,14 +66,14 @@ def _wants_build(messages):
 # Templated (not a second LLM call) to keep a compile to a single round-trip.
 # Short, plain-language trade-off note per personality (no jargon, no math).
 _ARCHETYPE_NOTE = {
-    "intraday_momentum": "It rides sustained moves and sits out the chop, so "
-        "expect flat, patient stretches when the market is range-bound.",
-    "mean_reversion": "It buys pullbacks expecting a bounce, so by design it "
-        "struggles in strong one-way trends — that's the trade-off you picked.",
+    "intraday_momentum": "Expect flat, patient stretches in range-bound markets "
+        "— that's the trade-off for not chasing every wiggle.",
+    "mean_reversion": "By design it struggles in strong one-way trends — it's "
+        "betting on bounces, not chasing breakdowns.",
     "breakout": "Real breakouts are rare, so it trades seldom and takes small "
         "losses on false starts to catch the occasional big move.",
-    "flow_driven": "It reacts to funding and liquidation spikes, which are rare "
-        "events — so its live track record matters more than any one backtest.",
+    "flow_driven": "Those spikes are rare, so it sits quiet between events — its "
+        "live track record matters more than any single backtest.",
 }
 
 
