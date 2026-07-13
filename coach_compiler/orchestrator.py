@@ -53,13 +53,17 @@ def is_question(text):
 
 
 def _wants_build(messages):
-    """A conversation is a build conversation if ANY user turn is not a pure
-    question (a build intent, or an elicitation answer mid-build)."""
+    """Route on the LATEST user message, not the whole history. If the newest
+    message is a question, answer it via Explain — even mid-build, so a platform
+    question like "how much to enter a competition?" after a build gets answered
+    rather than re-compiling a stale gene card. Anything else (a build request,
+    or a short elicitation reply like "BTC and ETH") goes to the Create path,
+    which still sees the full conversation for context."""
     user = [m for m in messages
             if m.get("role") == "user" and m.get("content")]
     if not user:
         return False
-    return any(not is_question(m["content"]) for m in user)
+    return not is_question(user[-1]["content"])
 
 
 # Per-archetype honest trade-off note, appended when the gene card is returned.

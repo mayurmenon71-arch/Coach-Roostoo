@@ -189,11 +189,18 @@ class TestRouter(unittest.TestCase):
         self.assertEqual(out["type"], "gene_card")
         self.assertTrue(seen["tools"])
 
-    def test_build_conversation_stays_heavy(self):
+    def test_elicitation_reply_continues_build(self):
         convo = [{"role": "user", "content": "make me an agent"},
                  {"role": "assistant", "content": "which coins?"},
                  {"role": "user", "content": "BTC and ETH"}]
         self.assertTrue(_wants_build(convo))
+
+    def test_question_after_build_routes_to_explain(self):
+        # The reported bug: a platform question after a build must NOT re-compile.
+        convo = [{"role": "user", "content": "build me a safe agent"},
+                 {"role": "assistant", "content": "Here's SteadyGains-03 ..."},
+                 {"role": "user", "content": "how much does it cost to enter a competition?"}]
+        self.assertFalse(_wants_build(convo))
 
 
 # ── Orchestrator control flow ───────────────────────────────────────────────

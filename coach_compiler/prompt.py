@@ -167,8 +167,8 @@ def create_mode_prompt(ui_context=None):
     configuration, injected so answers about "my agent" are grounded in real
     values rather than guessed.
     """
-    parts = [ROLE, MODE_SELECT, ENVELOPE, WORKFLOW, BACKTESTING, CONTEXT_POLICY,
-             NUMBERS, TONE]
+    parts = [ROLE, MODE_SELECT, ENVELOPE, PLATFORM_BRIEF, WORKFLOW, BACKTESTING,
+             CONTEXT_POLICY, NUMBERS, TONE]
     if ui_context:
         parts.append("CURRENT STRATEGY LAB CONFIG (the user's live on-screen "
                      "settings — reference these for 'my agent' questions):\n"
