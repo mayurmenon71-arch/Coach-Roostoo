@@ -49,7 +49,7 @@ REWARD_LABEL = {
     "calmar": "Calmar Ratio", "entropy": "Entropy",
     "volatility_penalty": "Volatility Penalty",
 }
-CANDLE_INTERVALS = ("5m", "15m")
+CANDLE_INTERVALS = ("1m", "5m", "15m")  # 1m added on request (not in the base v1 registry)
 
 # ── Continuous knobs (fraction 0.01-1.00 of position / capital) ─────────────
 PCT_BOUNDS = (0.01, 1.00)          # stop_loss, take_profit, max_trade, min_trade

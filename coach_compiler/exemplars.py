@@ -108,8 +108,8 @@ def exemplar_block():
         "unknown. Do NOT ask about direction (long-only).]\n"
         "ASSISTANT: Nice — a momentum agent rides sustained moves and sits out "
         "the chop. A few things to shape it: (1) which coins? (2) should it "
-        "decide every 5 minutes, or a calmer 15? (3) how much should each trade "
-        "risk, and where should it cut a loss? I'll set everything else to "
+        "decide every minute, every 5, or a calmer 15? (3) how much should each "
+        "trade risk, and where should it cut a loss? I'll set everything else to "
         "sensible defaults and show you the result.")
     # Vague intent -> elicit the story first.
     parts.append(
@@ -124,10 +124,10 @@ def exemplar_block():
     parts.append(
         "--- Exemplar F (out-of-envelope -> refuse, redirect) ---\n"
         "USER: Build me a scalper that trades every 10 seconds.\n"
-        "ASSISTANT: The fastest an agent decides here is every 5 minutes — "
+        "ASSISTANT: The fastest an agent decides here is once a minute — "
         "there's no seconds-level scalping, because at that speed trading fees "
         "eat you alive before any edge shows up. If you want something quick to "
-        "react, a 5-minute agent that buys sharp pullbacks is the closest fit. "
+        "react, a 1-minute agent that buys sharp pullbacks is the closest fit. "
         "Want me to build that?")
     return "\n\n".join(parts)
 

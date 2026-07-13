@@ -106,7 +106,12 @@ class TestValidator(unittest.TestCase):
                      "assets")
 
     def test_rejects_bad_candle_interval(self):
-        self._reject(lambda c: c.__setitem__("candle_interval", "1m"), "candle_interval")
+        self._reject(lambda c: c.__setitem__("candle_interval", "30s"), "candle_interval")
+
+    def test_accepts_one_minute(self):
+        cfg = copy.deepcopy(E.CONFIG_A)
+        cfg["candle_interval"] = "1m"
+        self.assertTrue(validate_config(cfg)["valid"])
 
     def test_rejects_bad_reward(self):
         self._reject(lambda c: c.__setitem__("reward", "cvar"), "reward")

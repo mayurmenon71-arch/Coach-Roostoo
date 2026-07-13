@@ -9,7 +9,7 @@ No internal reward-shaping math, no bps, no jargon.
 
 from . import schema as S
 
-_FREQ_LABEL = {"5m": "every 5 minutes", "15m": "every 15 minutes"}
+_FREQ_LABEL = {"1m": "every minute", "5m": "every 5 minutes", "15m": "every 15 minutes"}
 
 
 def _row(path, label, value, tier, rationale=None, locked_reason=None):
