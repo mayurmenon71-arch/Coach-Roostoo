@@ -459,12 +459,32 @@
       });
       h += '</div>';
     });
-    if (card.breakeven && card.breakeven.explanation)
-      h += '<div class="gcBreak"><b>Breakeven</b> — ' + escapeHtml(card.breakeven.explanation) + '</div>';
     (card.warnings || []).forEach(w => {
       h += '<div class="gcWarn">⚠ ' + escapeHtml(w.path) + ': ' + escapeHtml(w.message) + '</div>';
     });
+    // One-click launch: Coach picked the config; the user just taps this.
+    if (card.config) {
+      h += '<div class="gcFoot"><button class="gcLaunch" data-act="gene-launch" ' +
+        "data-cfg='" + escapeHtml(JSON.stringify(card.config)) + "'>🚀 Launch this agent</button></div>";
+    }
     return h + '</div>';
+  }
+
+  // Map a Coach v1 config onto the Strategy Lab controls (the fields that map
+  // cleanly) so launching visibly loads the agent and runs its backtest.
+  function applyConfigToLab(cfg) {
+    const FREQ = { '1m': '1min', '5m': '5min', '15m': '15min' };
+    const LAB_REWARDS = ['sharpe', 'sortino', 'calmar'];
+    const LAB_STEPS = ['250000', '300000', '350000'];
+    if (Array.isArray(cfg.assets) && cfg.assets.length) {
+      state.roster = cfg.assets.map(a => a.replace(/USDT$/, ''));
+      state.active = state.roster[0];
+    }
+    if (FREQ[cfg.candle_interval]) state.cfg.frequency = FREQ[cfg.candle_interval];
+    if (LAB_REWARDS.indexOf(cfg.reward) >= 0) state.cfg.reward = cfg.reward;
+    const steps = String(cfg.training_steps);
+    state.cfg.training = LAB_STEPS.indexOf(steps) >= 0 ? steps : '350000';
+    state.results = {};   // clear stale backtests
   }
 
   function chatSend(q, forceCanned) {
@@ -1097,6 +1117,33 @@
       pushBot('Done — config updated. Re-running the ' + state.active + ' backtest now; hit ↻ on the other assets when you are ready.');
       toast('Setup applied — re-running ' + state.active + ' backtest');
       rerender(true);
+    }
+    else if (act === 'gene-launch') {
+      let cfg;
+      try { cfg = JSON.parse(el.dataset.cfg); } catch (err) { return; }
+      const name = cfg.name || 'your agent';
+      el.disabled = true; el.textContent = '🚀 Launching…';
+      // Stage server-side (re-validates), then load into the Lab and run the backtest.
+      fetch('/api/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: cfg })
+      }).then(r => r.json()).then(out => {
+        if (!out || !out.ok) {
+          toast('Launch failed — config rejected');
+          el.disabled = false; el.textContent = '🚀 Launch this agent';
+          return;
+        }
+        applyConfigToLab(cfg);
+        pushBot('🚀 <strong>' + escapeHtml(name) + '</strong> is staged and loaded into the Lab — running its backtest for ' + state.active + ' now. (Real competition training connects once the factory API is live.)');
+        state.chatOpen = false;
+        document.body.classList.toggle('chat-open', false);
+        toast('🚀 Launching ' + name + ' — running backtest');
+        rerender(true);
+      }).catch(() => {
+        toast('Launch failed — backend unreachable');
+        el.disabled = false; el.textContent = '🚀 Launch this agent';
+      });
     }
     else if (act === 'avatar') {
       const ov = $('#ovlAvatar');

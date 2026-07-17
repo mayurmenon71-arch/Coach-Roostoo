@@ -241,6 +241,36 @@ def compile_health():
             "validator_selftest": "pass" if selftest else "FAIL"}
 
 
+# ── Stage / launch: the "Coach picks, user taps Launch" step ────────────────
+# POST /api/launch { config } -> re-validates (defense in depth) and stages the
+# agent for training. There is no real training backend in this build yet, so
+# this confirms the staged config and returns an id; wire the marked section to
+# the Roostoo factory/training API when it exists.
+@app.post("/api/launch")
+def launch_agent(body: dict):
+    import uuid
+    config = body.get("config")
+    if not isinstance(config, dict):
+        return JSONResponse({"ok": False, "error": "missing config"}, status_code=400)
+    verdict = _validate_config(config)   # never launch an unvalidated config
+    if not verdict["valid"]:
+        return JSONResponse({"ok": False, "errors": verdict["errors"]}, status_code=400)
+    cfg = verdict["config"]
+    agent_id = "agent_" + uuid.uuid4().hex[:8]
+    # >>> WIRE HERE: POST cfg to the Roostoo training/factory API to start real
+    #     training, and return its job id instead of this staged stub.
+    print("[launch] staged", agent_id, cfg.get("name"))
+    return JSONResponse({
+        "ok": True,
+        "agent_id": agent_id,
+        "staged": True,
+        "config": cfg,
+        "note": ("Staged for training. Connect the Roostoo factory API to start "
+                 "real training; for now this loads into the Strategy Lab and "
+                 "runs a backtest preview."),
+    })
+
+
 # Serve the coach UI from ./public (mounted last so /api routes take priority).
 # Resolve public/ relative to THIS file, not the process CWD: on Vercel the
 # function runs from /var/task and a bare "public" fails to resolve. Guard the
