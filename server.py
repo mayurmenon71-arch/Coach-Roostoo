@@ -209,6 +209,7 @@ async def health():
 
 from coach_compiler import exemplars as _exemplars  # noqa: E402
 from coach_compiler.orchestrator import run_coach as _run_coach  # noqa: E402
+from coach_compiler.schema import MAX_AGENTS_PER_BATCH as _MAX_BATCH  # noqa: E402
 from coach_compiler.validator import validate_config as _validate_config  # noqa: E402
 
 
@@ -242,32 +243,56 @@ def compile_health():
 
 
 # ── Stage / launch: the "Coach picks, user taps Launch" step ────────────────
-# POST /api/launch { config } -> re-validates (defense in depth) and stages the
-# agent for training. There is no real training backend in this build yet, so
-# this confirms the staged config and returns an id; wire the marked section to
-# the Roostoo factory/training API when it exists.
+# POST /api/launch -> re-validates (defense in depth) and stages agent(s) for
+# training. Accepts a single { config } (back-compat) OR a batch { configs:[...] }
+# for a fan-out (several agents from one strategy). There is no real training
+# backend in this build yet, so this confirms the staged config(s) and returns
+# id(s); wire the marked section to the Roostoo factory/training API when it exists.
 @app.post("/api/launch")
 def launch_agent(body: dict):
     import uuid
-    config = body.get("config")
-    if not isinstance(config, dict):
+    configs = body.get("configs")
+    single = configs is None
+    if single:
+        one = body.get("config")
+        configs = [one] if isinstance(one, dict) else None
+    if not isinstance(configs, list) or not configs:
         return JSONResponse({"ok": False, "error": "missing config"}, status_code=400)
-    verdict = _validate_config(config)   # never launch an unvalidated config
-    if not verdict["valid"]:
-        return JSONResponse({"ok": False, "errors": verdict["errors"]}, status_code=400)
-    cfg = verdict["config"]
-    agent_id = "agent_" + uuid.uuid4().hex[:8]
-    # >>> WIRE HERE: POST cfg to the Roostoo training/factory API to start real
-    #     training, and return its job id instead of this staged stub.
-    print("[launch] staged", agent_id, cfg.get("name"))
+    if len(configs) > _MAX_BATCH:
+        return JSONResponse({"ok": False,
+                             "error": "too many agents (max %d per launch)" % _MAX_BATCH},
+                            status_code=400)
+
+    staged = []
+    for c in configs:
+        verdict = _validate_config(c if isinstance(c, dict) else {})
+        if not verdict["valid"]:   # never launch an unvalidated config
+            return JSONResponse({"ok": False, "errors": verdict["errors"]}, status_code=400)
+        cfg = verdict["config"]
+        agent_id = "agent_" + uuid.uuid4().hex[:8]
+        # >>> WIRE HERE: POST cfg to the Roostoo training/factory API to start
+        #     real training, and keep its job id instead of this staged stub.
+        print("[launch] staged", agent_id, cfg.get("name"))
+        staged.append({"agent_id": agent_id, "name": cfg.get("name"), "config": cfg})
+
+    if single:
+        s = staged[0]
+        return JSONResponse({
+            "ok": True,
+            "agent_id": s["agent_id"],
+            "staged": True,
+            "config": s["config"],
+            "note": ("Staged for training. Connect the Roostoo factory API to start "
+                     "real training; for now this loads into the Strategy Lab and "
+                     "runs a backtest preview."),
+        })
     return JSONResponse({
         "ok": True,
-        "agent_id": agent_id,
         "staged": True,
-        "config": cfg,
-        "note": ("Staged for training. Connect the Roostoo factory API to start "
-                 "real training; for now this loads into the Strategy Lab and "
-                 "runs a backtest preview."),
+        "count": len(staged),
+        "agents": staged,
+        "note": ("%d agents staged for training. Connect the Roostoo factory API "
+                 "to start real training." % len(staged)),
     })
 
 

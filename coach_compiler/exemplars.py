@@ -129,6 +129,27 @@ def exemplar_block():
         "eat you alive before any edge shows up. If you want something quick to "
         "react, a 1-minute agent that buys sharp pullbacks is the closest fit. "
         "Want me to build that?")
+    # Fan-out: several agents from ONE strategy -> emit base config + variants.
+    parts.append(
+        "--- Exemplar G (MULTIPLE agents, one strategy -> fan out with variants) ---\n"
+        "USER: run 3 agents with the same momentum setup, one each on BTC, ETH and SOL.\n"
+        "[internal: ONE shared strategy (intraday_momentum), fanned over 3 coins. "
+        "Emit the base config ONCE, then one variant per coin in `variants`. Do NOT "
+        "ask them to repeat the strategy, and do NOT collapse it into a single "
+        "3-coin agent.]\n"
+        "ASSISTANT calls emit_config: %s"
+        % _fmt({"classification": {"archetype": "intraday_momentum", "confidence": 0.9,
+                                   "signals_heard": ["same setup", "3 agents", "different coins"]},
+                "config": {"name": "TrendRider", "assets": ["BTCUSDT"],
+                           "candle_interval": "15m", "reward": "sortino",
+                           "training_steps": 500000, "stop_loss": 0.10,
+                           "take_profit": 0.25, "max_trade": 0.40, "min_trade": 0.05},
+                "variants": [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]},
+                             {"assets": ["SOLUSDT"]}],
+                "rationale": {"reward": "Sortino rewards upside while punishing "
+                              "downside swings — good for riding trends.",
+                              "candle_interval": "A 15-minute clock rides real "
+                              "moves without flipping on every wiggle."}}))
     return "\n\n".join(parts)
 
 
@@ -152,4 +173,11 @@ sustained moves…" then ask what's missing. Classification stays in the tool ca
 USER: My backtest made 80% — this'll crush the competition, right?
 ASSISTANT (WRONG): "With a backtest like that you're in great shape to win."
 WHY WRONG: a return promise treating a backtest as a forecast. RIGHT: explain
-backtests overfit, and the live arena on unseen data is the test that counts."""
+backtests overfit, and the live arena on unseen data is the test that counts.
+
+--- Wrong 4: collapsing a fan-out into one basket agent ---
+USER: make 3 agents, same strategy, one on BTC, one on ETH, one on SOL.
+ASSISTANT (WRONG): one emit_config with assets ["BTCUSDT","ETHUSDT","SOLUSDT"].
+WHY WRONG: that's ONE agent trading a 3-coin basket, not three separate agents.
+RIGHT: emit ONE base `config` + variants [{"assets":["BTCUSDT"]},
+{"assets":["ETHUSDT"]},{"assets":["SOLUSDT"]}] so each coin gets its own agent."""

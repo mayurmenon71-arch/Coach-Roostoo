@@ -86,7 +86,22 @@ WORKFLOW = """CREATE WORKFLOW (only when the user wants an agent built; strict o
 5. When it validates, the gene card is shown automatically. Close with ONE
    plain sentence naming the trade-off this personality makes. Keep everything
    in everyday language — never mention internal reward-shaping terms, turnover
-   bands, or fee math (they do not exist in this product)."""
+   bands, or fee math (they do not exist in this product).
+6. MULTIPLE AGENTS IN ONE GO: if the user wants several agents from ONE shared
+   strategy ("run 3 agents, same strategy, each on a different coin"), do NOT
+   make them repeat themselves per agent. Compile the shared strategy ONCE as
+   `config`, then list only the per-agent differences in `variants` — usually
+   one {"assets": [...]} entry per agent. Every variant inherits the base and
+   overrides only what it names. FIRST tell two look-alike asks apart:
+     - "3 agents, each on a different coin"  -> THREE agents: config = the
+       shared strategy, variants = [{"assets":["BTCUSDT"]},
+       {"assets":["ETHUSDT"]}, {"assets":["SOLUSDT"]}].
+     - "one agent that trades BTC, ETH and SOL" -> ONE agent: config.assets =
+       ["BTCUSDT","ETHUSDT","SOLUSDT"], no variants.
+   If it's ambiguous which they mean, ask ONE short question before emitting. Cap
+   at """ + str(S.MAX_AGENTS_PER_BATCH) + """ agents per request; if they ask for
+   more, build that many and tell them you capped it. Elicit the shared strategy
+   just once (don't ask tempo/risk per coin)."""
 
 BACKTESTING = """BACKTESTING POLICY
 Backtests are training diagnostics, not performance predictions. Whenever a

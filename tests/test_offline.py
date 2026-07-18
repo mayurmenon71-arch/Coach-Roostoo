@@ -37,6 +37,20 @@ def _emit_call(config, rationale=None, archetype="intraday_momentum"):
     }
 
 
+def _emit_variants_call(config, variants, rationale=None, archetype="intraday_momentum"):
+    """emit_config call that fans one strategy out over several coins."""
+    return {
+        "role": "assistant", "content": "internal classification",
+        "tool_calls": [{
+            "id": "c1",
+            "function": {"name": "emit_config", "arguments": json.dumps({
+                "classification": {"archetype": archetype, "confidence": 0.9},
+                "config": config, "variants": variants,
+                "rationale": rationale or {}})},
+        }],
+    }
+
+
 def _text_turn(text):
     return {"role": "assistant", "content": text, "tool_calls": None}
 
@@ -244,6 +258,88 @@ class TestOrchestrator(unittest.TestCase):
         llm = ScriptedLLM([_emit_call(evil), _emit_call(evil), _emit_call(evil)])
         out = run_create([{"role": "user", "content": "give me x"}], llm=llm)
         self.assertNotEqual(out["type"], "gene_card")
+
+
+# ── Fan-out: several agents from one strategy ────────────────────────────────
+class TestFanout(unittest.TestCase):
+    def test_expand_no_variants_is_single_unchanged(self):
+        self.assertEqual(S.expand_configs(E.CONFIG_A), [E.CONFIG_A])
+
+    def test_expand_inherits_strategy_overrides_coin(self):
+        cfgs = S.expand_configs(E.CONFIG_A,
+                                [{"assets": ["ETHUSDT"]}, {"assets": ["SOLUSDT"]}])
+        self.assertEqual(len(cfgs), 2)
+        for c in cfgs:                                   # shared strategy inherited
+            self.assertEqual(c["reward"], E.CONFIG_A["reward"])
+            self.assertEqual(c["candle_interval"], E.CONFIG_A["candle_interval"])
+            self.assertEqual(c["stop_loss"], E.CONFIG_A["stop_loss"])
+        self.assertEqual(cfgs[0]["assets"], ["ETHUSDT"])  # coin overridden
+        self.assertEqual(cfgs[1]["assets"], ["SOLUSDT"])
+
+    def test_expand_autonames_uniquely_by_coin(self):
+        cfgs = S.expand_configs({**E.CONFIG_A, "name": "Rider"},
+                                [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]}])
+        names = [c["name"] for c in cfgs]
+        self.assertEqual(len(set(names)), len(names))     # no duplicate labels
+        self.assertIn("BTC", names[0])
+        self.assertIn("ETH", names[1])
+
+    def test_expand_dedupes_identical_coin_names(self):
+        cfgs = S.expand_configs({**E.CONFIG_A, "name": "Rider"},
+                                [{"assets": ["BTCUSDT"]}, {"assets": ["BTCUSDT"]}])
+        self.assertNotEqual(cfgs[0]["name"], cfgs[1]["name"])
+
+    def test_expanded_configs_all_pass_validation(self):
+        cfgs = S.expand_configs(E.CONFIG_A,
+                                [{"assets": ["ETHUSDT"]}, {"assets": ["SOLUSDT"]}])
+        for c in cfgs:
+            self.assertTrue(validate_config(c)["valid"], c)
+
+    def test_orchestrator_returns_gene_cards_for_batch(self):
+        llm = ScriptedLLM([_emit_variants_call(
+            E.CONFIG_A,
+            [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]}, {"assets": ["SOLUSDT"]}],
+            E.RATIONALE_A)])
+        out = run_create([{"role": "user",
+                           "content": "3 agents same strategy on BTC, ETH, SOL"}], llm=llm)
+        self.assertEqual(out["type"], "gene_cards")
+        self.assertEqual(len(out["cards"]), 3)
+        self.assertEqual([c["config"]["assets"] for c in out["cards"]],
+                         [["BTCUSDT"], ["ETHUSDT"], ["SOLUSDT"]])
+        # user-facing note stays clean of internal machinery
+        for banned in ("archetype", "->", "variants"):
+            self.assertNotIn(banned, out["text"].lower())
+
+    def test_single_variant_stays_gene_card(self):
+        llm = ScriptedLLM([_emit_variants_call(E.CONFIG_A, [{"assets": ["ETHUSDT"]}],
+                                               E.RATIONALE_A)])
+        out = run_create([{"role": "user", "content": "an eth momentum agent"}], llm=llm)
+        self.assertEqual(out["type"], "gene_card")
+
+    def test_batch_is_capped(self):
+        many = [{"assets": [a + "USDT"]}
+                for a in S.SUPPORTED_ASSETS[:S.MAX_AGENTS_PER_BATCH + 3]]
+        llm = ScriptedLLM([_emit_variants_call(E.CONFIG_A, many, E.RATIONALE_A)])
+        out = run_create([{"role": "user", "content": "one agent per coin"}], llm=llm)
+        self.assertEqual(out["type"], "gene_cards")
+        self.assertLessEqual(len(out["cards"]), S.MAX_AGENTS_PER_BATCH)
+
+    def test_invalid_variant_repairs_to_batch(self):
+        bad = _emit_variants_call(
+            E.CONFIG_A, [{"assets": ["ETHUSDT"]}, {"assets": ["TSLAUSDT"]}], E.RATIONALE_A)
+        good = _emit_variants_call(
+            E.CONFIG_A, [{"assets": ["ETHUSDT"]}, {"assets": ["SOLUSDT"]}], E.RATIONALE_A)
+        out = run_create([{"role": "user", "content": "eth and sol"}],
+                         llm=ScriptedLLM([bad, good]))
+        self.assertEqual(out["type"], "gene_cards")
+        self.assertEqual(len(out["cards"]), 2)
+
+    def test_bad_variant_never_reaches_factory(self):
+        bad = _emit_variants_call(
+            E.CONFIG_A, [{"assets": ["ETHUSDT"]}, {"assets": ["TSLAUSDT"]}], E.RATIONALE_A)
+        out = run_create([{"role": "user", "content": "eth and tsla"}],
+                         llm=ScriptedLLM([bad, bad, bad]))
+        self.assertNotEqual(out["type"], "gene_cards")
 
 
 # ── Eval harness self-test ──────────────────────────────────────────────────
