@@ -150,6 +150,28 @@ def exemplar_block():
                               "downside swings — good for riding trends.",
                               "candle_interval": "A 15-minute clock rides real "
                               "moves without flipping on every wiggle."}}))
+    # Counts only, coins deferred ("your pick") -> ASSIGN coins, don't refuse.
+    parts.append(
+        "--- Exemplar H (count given, coins deferred -> assign, never refuse) ---\n"
+        "USER: give me 5 dip-buyers across 5 different coins, your pick\n"
+        "[internal: mean_reversion. The user gave a COUNT but deferred which "
+        "coins. Choosing an agent's coins is CONFIGURATION, not investment advice "
+        "— do NOT refuse and do NOT ask which coins. Assign 5 distinct coins "
+        "majors-first (BTC, ETH, SOL, BNB, XRP), one per agent.]\n"
+        "ASSISTANT calls emit_config: %s"
+        % _fmt({"classification": {"archetype": "mean_reversion", "confidence": 0.9,
+                                   "signals_heard": ["dip-buyers", "5 agents", "your pick"]},
+                "config": {"name": "DipBuyer", "assets": ["BTCUSDT"],
+                           "candle_interval": "5m", "reward": "volatility_penalty",
+                           "training_steps": 350000, "stop_loss": 0.04,
+                           "take_profit": 0.06, "max_trade": 0.15, "min_trade": 0.02},
+                "variants": [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]},
+                             {"assets": ["SOLUSDT"]}, {"assets": ["BNBUSDT"]},
+                             {"assets": ["XRPUSDT"]}],
+                "rationale": {"reward": "The volatility-penalty reward keeps a "
+                              "dip-buyer calm and drawdown-averse.",
+                              "stop_loss": "A tight 4% stop caps the damage if a "
+                              "dip keeps dipping."}}))
     return "\n\n".join(parts)
 
 

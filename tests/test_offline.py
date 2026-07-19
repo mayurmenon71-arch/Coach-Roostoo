@@ -352,6 +352,25 @@ class TestFanout(unittest.TestCase):
                          llm=ScriptedLLM([bad, bad, bad]))
         self.assertNotEqual(out["type"], "gene_cards")
 
+    def test_recommended_order_is_permutation_of_supported(self):
+        # Drift guard: the majors-first assignment list must cover every supported
+        # coin exactly once, or "your pick" could assign an invalid/duplicate coin.
+        self.assertEqual(set(S.RECOMMENDED_ORDER), set(S.SUPPORTED_ASSETS))
+        self.assertEqual(len(S.RECOMMENDED_ORDER), len(set(S.RECOMMENDED_ORDER)))
+
+    def test_coins_deferred_assignment_is_distinct_and_valid(self):
+        # "5 agents, coins deferred" -> majors-first, one distinct coin per agent.
+        picks = [{"assets": [c + S.QUOTE]} for c in S.RECOMMENDED_ORDER[:5]]
+        base = {"name": "DipBuyer", "assets": [S.RECOMMENDED_ORDER[0] + S.QUOTE],
+                "candle_interval": "5m", "reward": "volatility_penalty",
+                "training_steps": 350000, "stop_loss": 0.04, "take_profit": 0.06,
+                "max_trade": 0.15, "min_trade": 0.02}
+        cfgs = S.expand_configs(base, picks)
+        self.assertEqual(len(cfgs), 5)
+        self.assertEqual(len({c["assets"][0] for c in cfgs}), 5)   # all different
+        for c in cfgs:
+            self.assertTrue(validate_config(c)["valid"], c)
+
 
 # ── Eval harness self-test ──────────────────────────────────────────────────
 class TestEvalHarness(unittest.TestCase):

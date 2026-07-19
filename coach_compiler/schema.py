@@ -45,6 +45,16 @@ MAX_ASSETS = 10
 # training job for all 21 coins at once.
 MAX_AGENTS_PER_BATCH = 6
 
+# Assignment order (majors first) for when a user asks for a COUNT of agents/coins
+# but defers WHICH coins ("your pick", "you choose"). Coach assigns from this
+# order so each agent gets a distinct, liquid set — choosing an agent's coins is a
+# configuration act, NOT investment advice. Must be a permutation of
+# SUPPORTED_ASSETS (asserted in tests).
+RECOMMENDED_ORDER = (
+    "BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT",
+    "TRX", "LTC", "UNI", "NEAR", "AAVE", "SUI", "XLM", "HBAR", "VET", "FET", "SHIB",
+)
+
 # ── User-selectable knobs (discrete sets) ───────────────────────────────────
 TRAINING_STEPS = (300000, 350000, 500000)
 REWARDS = ("sharpe", "sortino", "calmar", "entropy", "volatility_penalty")
