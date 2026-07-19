@@ -171,29 +171,43 @@ def expand_configs(base, variants=None):
 
 def _config_field_properties():
     """The v1 config field schemas — shared by emit_config's `config` object AND
-    each per-agent `variants` patch, so the two can never drift apart."""
+    each per-agent `variants` patch, so the two can never drift apart.
+
+    Deliberately NO value constraints (`enum`, `minimum`/`maximum`,
+    `minItems`/`maxItems`, `maxLength`): value sets and ranges are stated in each
+    field's `description` and enforced by the deterministic validator
+    (validator.validate_config), NOT pinned in the JSON schema. A strict provider
+    (e.g. Groq) hard-rejects an out-of-set tool call with an opaque 400 that
+    bypasses our repair loop — so one bad coin would sink an entire multi-agent
+    request. Keeping only TYPES here lets every bad pick reach the validator,
+    which turns it into a clean error the model can repair from. The prompt's
+    OPERATING ENVELOPE lists the same allowed values, so the model stays steered."""
+    coins = ", ".join(a + QUOTE for a in SUPPORTED_ASSETS)
     return {
-        "name": {"type": "string", "maxLength": 40},
+        "name": {"type": "string",
+                 "description": "1-40 chars: letters, digits, spaces, - _"},
         "assets": {
             "type": "array",
-            "minItems": MIN_ASSETS, "maxItems": MAX_ASSETS,
-            "items": {"type": "string",
-                      "enum": [a + QUOTE for a in SUPPORTED_ASSETS]},
+            "items": {"type": "string"},
+            "description": ("%d-%d coins, each EXACTLY one of: %s"
+                            % (MIN_ASSETS, MAX_ASSETS, coins)),
         },
-        "candle_interval": {"type": "string", "enum": list(CANDLE_INTERVALS)},
-        "reward": {"type": "string", "enum": list(REWARDS)},
-        "training_steps": {"type": "integer", "enum": list(TRAINING_STEPS)},
-        "stop_loss": {"type": "number", "minimum": PCT_BOUNDS[0],
-                      "maximum": PCT_BOUNDS[1],
+        "candle_interval": {"type": "string",
+                            "description": "one of: " + ", ".join(CANDLE_INTERVALS)},
+        "reward": {"type": "string",
+                   "description": "one of: " + ", ".join(REWARDS)},
+        "training_steps": {"type": "integer",
+                           "description": "one of: "
+                           + ", ".join(str(s) for s in TRAINING_STEPS)},
+        "stop_loss": {"type": "number",
                       "description": "fraction of position, 0.01-1.00"},
-        "take_profit": {"type": "number", "minimum": PCT_BOUNDS[0],
-                        "maximum": PCT_BOUNDS[1]},
-        "max_trade": {"type": "number", "minimum": PCT_BOUNDS[0],
-                      "maximum": PCT_BOUNDS[1],
-                      "description": "max fraction of capital per order"},
-        "min_trade": {"type": "number", "minimum": PCT_BOUNDS[0],
-                      "maximum": PCT_BOUNDS[1],
-                      "description": "min fraction of capital per order"},
+        "take_profit": {"type": "number",
+                        "description": "fraction of position, 0.01-1.00"},
+        "max_trade": {"type": "number",
+                      "description": "max fraction of capital per order, 0.01-1.00"},
+        "min_trade": {"type": "number",
+                      "description": ("min fraction of capital per order, 0.01-1.00; "
+                                      "must be <= max_trade")},
     }
 
 
@@ -220,9 +234,10 @@ def build_emit_config_tool():
                         "additionalProperties": False,
                         "required": ["archetype", "confidence"],
                         "properties": {
-                            "archetype": {"type": "string", "enum": list(ARCHETYPES),
-                                          "description": "internal classification only; never shown to the user"},
-                            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                            "archetype": {"type": "string",
+                                          "description": ("internal only, never shown to the user; "
+                                                          "one of: " + ", ".join(ARCHETYPES))},
+                            "confidence": {"type": "number", "description": "0-1"},
                             "signals_heard": {"type": "array", "items": {"type": "string"}},
                         },
                     },
@@ -236,8 +251,6 @@ def build_emit_config_tool():
                     },
                     "variants": {
                         "type": "array",
-                        "maxItems": MAX_AGENTS_PER_BATCH,
-                        "additionalProperties": False,
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
@@ -248,12 +261,13 @@ def build_emit_config_tool():
                             "shared strategy in a single request — most commonly "
                             "one {\"assets\": [...]} entry per agent. Each entry "
                             "inherits every field from `config` and overrides only "
-                            "what it names. Leave this out for a single agent. "
-                            "Example — 'run 3 agents on different coins' -> "
-                            "variants:[{\"assets\":[\"BTCUSDT\"]},"
+                            "what it names. Leave this out for a single agent. At "
+                            "most %d agents per request. Example — 'run 3 agents on "
+                            "different coins' -> variants:[{\"assets\":[\"BTCUSDT\"]},"
                             "{\"assets\":[\"ETHUSDT\"]},{\"assets\":[\"SOLUSDT\"]}]. "
                             "Do NOT use this for one agent that trades a basket of "
                             "coins (that is a single `config` with several assets)."
+                            % MAX_AGENTS_PER_BATCH
                         ),
                     },
                     "rationale": {

@@ -98,6 +98,17 @@ class TestSchema(unittest.TestCase):
                      "feature_families", "min_holding", "max_leverage", "no_trade_band"):
             self.assertNotIn(gone, blob, gone + " should be gone in v1")
 
+    def test_tool_schema_free_of_provider_value_gates(self):
+        # A strict provider (Groq) hard-400s on an out-of-set value when the
+        # schema pins it — bypassing our validator + repair loop, so one bad
+        # coin sinks a whole multi-agent request. VALUE rules live in the
+        # validator, not the schema: emit_config must carry no enum / min-max /
+        # item-count / length gates (only TYPES + structure).
+        blob = json.dumps(S.build_emit_config_tool())
+        for gate in ('"enum"', '"minimum"', '"maximum"', '"minItems"',
+                     '"maxItems"', '"maxLength"'):
+            self.assertNotIn(gate, blob, gate + " must not gate emit_config values")
+
 
 # ── Validator: v1 range/enum/coherence ──────────────────────────────────────
 class TestValidator(unittest.TestCase):
