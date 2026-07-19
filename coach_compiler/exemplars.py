@@ -100,17 +100,25 @@ def exemplar_block():
                _fmt({"classification": {"archetype": arch, "confidence": 0.9,
                                         "signals_heard": signals},
                      "config": cfg, "rationale": rat})))
-    # Clear style, missing details -> elicit cleanly (plain language, no jargon).
+    # Clear personality, NO coins/details -> BUILD with defaults (don't elicit).
     parts.append(
-        "--- Exemplar D (clear style, missing details -> elicit cleanly) ---\n"
-        "USER: give me a momentum based strategy\n"
-        "[internal: classifies as intraday_momentum, but coins/tempo/risk are "
-        "unknown. Do NOT ask about direction (long-only).]\n"
-        "ASSISTANT: Nice — a momentum agent rides sustained moves and sits out "
-        "the chop. A few things to shape it: (1) which coins? (2) should it "
-        "decide every minute, every 5, or a calmer 15? (3) how much should each "
-        "trade risk, and where should it cut a loss? I'll set everything else to "
-        "sensible defaults and show you the result.")
+        "--- Exemplar D (clear personality, no details -> BUILD with defaults, don't ask) ---\n"
+        "USER: give me a strategy based on momentum\n"
+        "[internal: intraday_momentum is clear; coins/tempo/risk unspecified. Per "
+        "WORKFLOW step 2 do NOT elicit — call emit_config NOW with default coins "
+        "(BTCUSDT + ETHUSDT, most liquid) and the momentum defaults. The closing "
+        "line names the coins and invites changes.]\n"
+        "ASSISTANT calls emit_config: %s"
+        % _fmt({"classification": {"archetype": "intraday_momentum", "confidence": 0.85,
+                                   "signals_heard": ["momentum", "no coins specified"]},
+                "config": {"name": "TrendRider", "assets": ["BTCUSDT", "ETHUSDT"],
+                           "candle_interval": "15m", "reward": "sortino",
+                           "training_steps": 500000, "stop_loss": 0.10,
+                           "take_profit": 0.25, "max_trade": 0.40, "min_trade": 0.05},
+                "rationale": {"candle_interval": "A 15-minute clock rides real "
+                              "moves without flipping on every wiggle.",
+                              "reward": "Sortino rewards upside while punishing "
+                              "downside swings — suits riding trends."}}))
     # Vague intent -> elicit the story first.
     parts.append(
         "--- Exemplar E (vague intent -> elicit) ---\n"

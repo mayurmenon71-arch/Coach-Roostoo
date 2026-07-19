@@ -418,14 +418,16 @@
   // injects so Coach can ground "my agent" answers in the live on-screen state.
   function currentConfigContext() {
     const c = state.cfg;
-    const indicatorsOn = c.feats.filter(Boolean).length;
     const roster = state.roster.map(sym => {
       const r = state.results[sym];
       return sym + 'USDT' + (r ? ' (grade ' + r.verdict.grade + ', avg ' + fmtPct(r.verdict.lastAvg) + (isFresh(sym) ? '' : ', STALE') + ')' : ' (not backtested)');
     }).join(', ');
+    // NOTE: indicators are FIXED (8 technical indicators, always on) in the
+    // Coach's model — do NOT report a "N/12 enabled" count here; it contradicts
+    // the Coach's rulebook and makes it give wrong toggle/keep-N answers.
     return 'Decision frequency: ' + c.frequency + '. Training steps: ' +
       (parseInt(c.training) / 1000) + 'k. Reward function: ' + c.reward +
-      '. Indicators enabled: ' + indicatorsOn + '/12. Asset roster: ' + roster + '.';
+      '. Indicators: all 8 technical indicators always on (fixed, not toggleable). Asset roster: ' + roster + '.';
   }
 
   // Unified Coach backend (/api/compile). ONE endpoint handles both concept/
