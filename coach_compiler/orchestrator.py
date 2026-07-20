@@ -93,6 +93,30 @@ def _closing_note(card):
     return " ".join(parts)
 
 
+def _card_coins(card):
+    """Plain coin list for a card (drops the USDT quote for readability)."""
+    assets = (card.get("config") or {}).get("assets") or []
+    coins = [a[:-len(S.QUOTE)] if a.endswith(S.QUOTE) else a for a in assets]
+    return ", ".join(coins) or "?"
+
+
+def _batch_closing_note(cards):
+    """Closing note for a fan-out of one strategy across several agents.
+    Templated (no extra LLM call), like _closing_note, to keep a compile to a
+    single round-trip under the provider's per-minute token budget."""
+    arch = (cards[0].get("classification") or {}).get("archetype") if cards else None
+    per_agent = "; ".join(_card_coins(c) for c in cards)
+    parts = ["Here are **%d agents** — the same strategy, one each on %s. They "
+             "share every setting except the coins, so you can see which market "
+             "it suits best." % (len(cards), per_agent)]
+    note = _ARCHETYPE_NOTE.get(arch)
+    if note:
+        parts.append(note)
+    parts.append("A strong backtest can overfit, so treat these as starting "
+                 "points — the live arena on unseen data is the real test.")
+    return " ".join(parts)
+
+
 def _tool_result(call_id, name, payload):
     return {
         "role": "tool",
@@ -114,9 +138,10 @@ def run_create(messages, llm=None, ui_context=None):
                   Lab config, so "my agent" questions are grounded.
 
     Returns one of:
-        {"type": "chat",      "text": str}                       # elicitation / explanation
-        {"type": "gene_card", "card": {...}, "text": str}        # compiled + validated
-        {"type": "error",     "text": str, "errors": [...]}      # repair rounds exhausted
+        {"type": "chat",       "text": str}                       # elicitation / explanation
+        {"type": "gene_card",  "card": {...}, "text": str}        # one compiled + validated agent
+        {"type": "gene_cards", "cards": [...], "text": str}       # a fan-out: N agents, one strategy
+        {"type": "error",      "text": str, "errors": [...]}      # repair rounds exhausted
     """
     if llm is None:
         from .llm_client import call_chat as llm
@@ -168,21 +193,41 @@ def run_create(messages, llm=None, ui_context=None):
                 config = args.get("config") or {}
                 rationale = args.get("rationale") or {}
                 classification = args.get("classification") or {}
-                verdict = validate_config(config)
-                last_errors = verdict["errors"]
+                variants = args.get("variants") or []
 
-                if verdict["valid"]:
-                    card = build_gene_card(
-                        verdict["config"], rationale, classification,
-                        verdict["warnings"],
-                    )
-                    # Return the gene card immediately with a templated closing
-                    # note. The card already carries every value + its rationale,
-                    # so a second LLM call just to narrate is redundant — and on
-                    # rate-limited tiers that extra round-trip is what tips a
-                    # compile over the per-minute token budget.
-                    return {"type": "gene_card", "card": card,
-                            "text": _closing_note(card)}
+                # Fan one strategy out into N agents. The model authored ONE
+                # config + the per-agent differences; Python clones the base, so
+                # "same strategy across coins" is guaranteed here, not by the LLM.
+                configs = S.expand_configs(config, variants)[:S.MAX_AGENTS_PER_BATCH]
+                verdicts = [validate_config(c) for c in configs]
+                multi = len(configs) > 1
+
+                # Label validator errors by agent index when there's a batch.
+                errors = []
+                for idx, vd in enumerate(verdicts):
+                    for e in vd["errors"]:
+                        path = ("agent[%d].%s" % (idx, e["path"])) if multi else e["path"]
+                        errors.append({"path": path, "message": e["message"]})
+                last_errors = errors
+
+                if all(vd["valid"] for vd in verdicts):
+                    # For a fan-out, the shared `assets` rationale would
+                    # misdescribe each agent's own coin, so drop just that key —
+                    # the per-card Coins row already says it.
+                    rat = ({k: v for k, v in rationale.items() if k != "assets"}
+                           if multi else rationale)
+                    cards = [build_gene_card(vd["config"], rat, classification,
+                                             vd["warnings"]) for vd in verdicts]
+                    # Return immediately with a templated closing note. The cards
+                    # already carry every value + rationale, so a second LLM call
+                    # just to narrate is redundant — and on rate-limited tiers
+                    # that extra round-trip is what tips a compile over the
+                    # per-minute token budget.
+                    if multi:
+                        return {"type": "gene_cards", "cards": cards,
+                                "text": _batch_closing_note(cards)}
+                    return {"type": "gene_card", "card": cards[0],
+                            "text": _closing_note(cards[0])}
                 else:
                     repair_rounds += 1
                     if repair_rounds > MAX_REPAIR_ROUNDS:
@@ -192,16 +237,19 @@ def run_create(messages, llm=None, ui_context=None):
                                      "%d repair attempts. The remaining issues: %s"
                                      % (MAX_REPAIR_ROUNDS, "; ".join(
                                          "%s — %s" % (e["path"], e["message"])
-                                         for e in verdict["errors"][:5]))),
-                            "errors": verdict["errors"],
+                                         for e in errors[:5]))),
+                            "errors": errors,
                         }
                     convo.append(_tool_result(call_id, name, {
                         "valid": False,
-                        "errors": verdict["errors"],
+                        "errors": errors,
                         "repair_round": repair_rounds,
                         "next": ("Rejected by the deterministic validator. "
                                  "Explain the rejection in plain language, then "
-                                 "re-emit the nearest valid config. Round %d of %d."
+                                 "re-emit the nearest valid config. When building "
+                                 "several agents, keep the shared strategy in "
+                                 "`config` and only fix the offending field(s). "
+                                 "Round %d of %d."
                                  % (repair_rounds, MAX_REPAIR_ROUNDS)),
                     }))
 

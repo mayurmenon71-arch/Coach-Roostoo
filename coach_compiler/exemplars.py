@@ -100,17 +100,25 @@ def exemplar_block():
                _fmt({"classification": {"archetype": arch, "confidence": 0.9,
                                         "signals_heard": signals},
                      "config": cfg, "rationale": rat})))
-    # Clear style, missing details -> elicit cleanly (plain language, no jargon).
+    # Clear personality, NO coins/details -> BUILD with defaults (don't elicit).
     parts.append(
-        "--- Exemplar D (clear style, missing details -> elicit cleanly) ---\n"
-        "USER: give me a momentum based strategy\n"
-        "[internal: classifies as intraday_momentum, but coins/tempo/risk are "
-        "unknown. Do NOT ask about direction (long-only).]\n"
-        "ASSISTANT: Nice — a momentum agent rides sustained moves and sits out "
-        "the chop. A few things to shape it: (1) which coins? (2) should it "
-        "decide every minute, every 5, or a calmer 15? (3) how much should each "
-        "trade risk, and where should it cut a loss? I'll set everything else to "
-        "sensible defaults and show you the result.")
+        "--- Exemplar D (clear personality, no details -> BUILD with defaults, don't ask) ---\n"
+        "USER: give me a strategy based on momentum\n"
+        "[internal: intraday_momentum is clear; coins/tempo/risk unspecified. Per "
+        "WORKFLOW step 2 do NOT elicit — call emit_config NOW with default coins "
+        "(BTCUSDT + ETHUSDT, most liquid) and the momentum defaults. The closing "
+        "line names the coins and invites changes.]\n"
+        "ASSISTANT calls emit_config: %s"
+        % _fmt({"classification": {"archetype": "intraday_momentum", "confidence": 0.85,
+                                   "signals_heard": ["momentum", "no coins specified"]},
+                "config": {"name": "TrendRider", "assets": ["BTCUSDT", "ETHUSDT"],
+                           "candle_interval": "15m", "reward": "sortino",
+                           "training_steps": 500000, "stop_loss": 0.10,
+                           "take_profit": 0.25, "max_trade": 0.40, "min_trade": 0.05},
+                "rationale": {"candle_interval": "A 15-minute clock rides real "
+                              "moves without flipping on every wiggle.",
+                              "reward": "Sortino rewards upside while punishing "
+                              "downside swings — suits riding trends."}}))
     # Vague intent -> elicit the story first.
     parts.append(
         "--- Exemplar E (vague intent -> elicit) ---\n"
@@ -129,6 +137,49 @@ def exemplar_block():
         "eat you alive before any edge shows up. If you want something quick to "
         "react, a 1-minute agent that buys sharp pullbacks is the closest fit. "
         "Want me to build that?")
+    # Fan-out: several agents from ONE strategy -> emit base config + variants.
+    parts.append(
+        "--- Exemplar G (MULTIPLE agents, one strategy -> fan out with variants) ---\n"
+        "USER: run 3 agents with the same momentum setup, one each on BTC, ETH and SOL.\n"
+        "[internal: ONE shared strategy (intraday_momentum), fanned over 3 coins. "
+        "Emit the base config ONCE, then one variant per coin in `variants`. Do NOT "
+        "ask them to repeat the strategy, and do NOT collapse it into a single "
+        "3-coin agent.]\n"
+        "ASSISTANT calls emit_config: %s"
+        % _fmt({"classification": {"archetype": "intraday_momentum", "confidence": 0.9,
+                                   "signals_heard": ["same setup", "3 agents", "different coins"]},
+                "config": {"name": "TrendRider", "assets": ["BTCUSDT"],
+                           "candle_interval": "15m", "reward": "sortino",
+                           "training_steps": 500000, "stop_loss": 0.10,
+                           "take_profit": 0.25, "max_trade": 0.40, "min_trade": 0.05},
+                "variants": [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]},
+                             {"assets": ["SOLUSDT"]}],
+                "rationale": {"reward": "Sortino rewards upside while punishing "
+                              "downside swings — good for riding trends.",
+                              "candle_interval": "A 15-minute clock rides real "
+                              "moves without flipping on every wiggle."}}))
+    # Counts only, coins deferred ("your pick") -> ASSIGN coins, don't refuse.
+    parts.append(
+        "--- Exemplar H (count given, coins deferred -> assign, never refuse) ---\n"
+        "USER: give me 5 dip-buyers across 5 different coins, your pick\n"
+        "[internal: mean_reversion. The user gave a COUNT but deferred which "
+        "coins. Choosing an agent's coins is CONFIGURATION, not investment advice "
+        "— do NOT refuse and do NOT ask which coins. Assign 5 distinct coins "
+        "majors-first (BTC, ETH, SOL, BNB, XRP), one per agent.]\n"
+        "ASSISTANT calls emit_config: %s"
+        % _fmt({"classification": {"archetype": "mean_reversion", "confidence": 0.9,
+                                   "signals_heard": ["dip-buyers", "5 agents", "your pick"]},
+                "config": {"name": "DipBuyer", "assets": ["BTCUSDT"],
+                           "candle_interval": "5m", "reward": "volatility_penalty",
+                           "training_steps": 350000, "stop_loss": 0.04,
+                           "take_profit": 0.06, "max_trade": 0.15, "min_trade": 0.02},
+                "variants": [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]},
+                             {"assets": ["SOLUSDT"]}, {"assets": ["BNBUSDT"]},
+                             {"assets": ["XRPUSDT"]}],
+                "rationale": {"reward": "The volatility-penalty reward keeps a "
+                              "dip-buyer calm and drawdown-averse.",
+                              "stop_loss": "A tight 4% stop caps the damage if a "
+                              "dip keeps dipping."}}))
     return "\n\n".join(parts)
 
 
@@ -152,4 +203,11 @@ sustained moves…" then ask what's missing. Classification stays in the tool ca
 USER: My backtest made 80% — this'll crush the competition, right?
 ASSISTANT (WRONG): "With a backtest like that you're in great shape to win."
 WHY WRONG: a return promise treating a backtest as a forecast. RIGHT: explain
-backtests overfit, and the live arena on unseen data is the test that counts."""
+backtests overfit, and the live arena on unseen data is the test that counts.
+
+--- Wrong 4: collapsing a fan-out into one basket agent ---
+USER: make 3 agents, same strategy, one on BTC, one on ETH, one on SOL.
+ASSISTANT (WRONG): one emit_config with assets ["BTCUSDT","ETHUSDT","SOLUSDT"].
+WHY WRONG: that's ONE agent trading a 3-coin basket, not three separate agents.
+RIGHT: emit ONE base `config` + variants [{"assets":["BTCUSDT"]},
+{"assets":["ETHUSDT"]},{"assets":["SOLUSDT"]}] so each coin gets its own agent."""

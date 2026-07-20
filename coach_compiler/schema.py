@@ -40,6 +40,20 @@ SUPPORTED_ASSETS = (
 QUOTE = "USDT"
 MIN_ASSETS = 1
 MAX_ASSETS = 10
+# Fan-out cap: at most this many agents compiled from ONE strategy in a single
+# request (e.g. "run an agent per coin"). Keeps a single ask from spawning a
+# training job for all 21 coins at once.
+MAX_AGENTS_PER_BATCH = 6
+
+# Assignment order (majors first) for when a user asks for a COUNT of agents/coins
+# but defers WHICH coins ("your pick", "you choose"). Coach assigns from this
+# order so each agent gets a distinct, liquid set — choosing an agent's coins is a
+# configuration act, NOT investment advice. Must be a permutation of
+# SUPPORTED_ASSETS (asserted in tests).
+RECOMMENDED_ORDER = (
+    "BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT",
+    "TRX", "LTC", "UNI", "NEAR", "AAVE", "SUI", "XLM", "HBAR", "VET", "FET", "SHIB",
+)
 
 # ── User-selectable knobs (discrete sets) ───────────────────────────────────
 TRAINING_STEPS = (300000, 350000, 500000)
@@ -117,7 +131,95 @@ def default_config_for(archetype, assets=None, name=None):
     }
 
 
+# ── Fan-out: one strategy -> many agents (different coins) ──────────────────
+
+def _asset_suffix(assets):
+    """A short, human tag for a coin set, used to auto-name fan-out agents."""
+    coins = [a[:-len(QUOTE)] if a.endswith(QUOTE) else a for a in (assets or [])]
+    if not coins:
+        return ""
+    if len(coins) <= 2:
+        return "+".join(coins)
+    return "+".join(coins[:2]) + "+%d" % (len(coins) - 2)   # e.g. BTC+ETH+1
+
+
+def expand_configs(base, variants=None):
+    """Fan a single base config out into one config per variant.
+
+    Each variant is a partial patch: it inherits every field from `base` and
+    overrides only the keys it sets (typically `assets`). With no variants this
+    returns ``[base]`` unchanged — so the single-agent path is untouched. When a
+    variant doesn't name itself, the agent is auto-named by its coin(s), and
+    names are de-duplicated so the roster never shows two identical labels.
+
+    This is the deterministic half of the fan-out: the model authors ONE
+    strategy plus the per-agent differences; Python does the cloning, so "same
+    strategy across coins" is guaranteed by code, not hoped for from the model.
+    """
+    base = dict(base or {})
+    if not variants:
+        return [base]
+    out, used = [], set()
+    stem = base.get("name") or "agent"
+    for i, v in enumerate(variants):
+        merged = dict(base)
+        merged.update({k: val for k, val in (v or {}).items() if val is not None})
+        if not (v or {}).get("name"):
+            suffix = _asset_suffix(merged.get("assets")) or str(i + 1)
+            merged["name"] = ("%s-%s" % (stem, suffix))[:40]
+        base_name, n, name = merged["name"], 2, merged["name"]
+        while name in used:
+            name = "%s-%d" % (base_name[:37], n)
+            n += 1
+        merged["name"] = name
+        used.add(name)
+        out.append(merged)
+    return out
+
+
 # ── emit_config tool: exactly the v1 user-selectable knobs ──────────────────
+
+def _config_field_properties():
+    """The v1 config field schemas — shared by emit_config's `config` object AND
+    each per-agent `variants` patch, so the two can never drift apart.
+
+    Deliberately NO value constraints (`enum`, `minimum`/`maximum`,
+    `minItems`/`maxItems`, `maxLength`): value sets and ranges are stated in each
+    field's `description` and enforced by the deterministic validator
+    (validator.validate_config), NOT pinned in the JSON schema. A strict provider
+    (e.g. Groq) hard-rejects an out-of-set tool call with an opaque 400 that
+    bypasses our repair loop — so one bad coin would sink an entire multi-agent
+    request. Keeping only TYPES here lets every bad pick reach the validator,
+    which turns it into a clean error the model can repair from. The prompt's
+    OPERATING ENVELOPE lists the same allowed values, so the model stays steered."""
+    coins = ", ".join(a + QUOTE for a in SUPPORTED_ASSETS)
+    return {
+        "name": {"type": "string",
+                 "description": "1-40 chars: letters, digits, spaces, - _"},
+        "assets": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": ("%d-%d coins, each EXACTLY one of: %s"
+                            % (MIN_ASSETS, MAX_ASSETS, coins)),
+        },
+        "candle_interval": {"type": "string",
+                            "description": "one of: " + ", ".join(CANDLE_INTERVALS)},
+        "reward": {"type": "string",
+                   "description": "one of: " + ", ".join(REWARDS)},
+        "training_steps": {"type": "integer",
+                           "description": "one of: "
+                           + ", ".join(str(s) for s in TRAINING_STEPS)},
+        "stop_loss": {"type": "number",
+                      "description": "fraction of position, 0.01-1.00"},
+        "take_profit": {"type": "number",
+                        "description": "fraction of position, 0.01-1.00"},
+        "max_trade": {"type": "number",
+                      "description": "max fraction of capital per order, 0.01-1.00"},
+        "min_trade": {"type": "number",
+                      "description": ("min fraction of capital per order, 0.01-1.00; "
+                                      "must be <= max_trade")},
+    }
+
 
 def build_emit_config_tool():
     return {
@@ -128,7 +230,9 @@ def build_emit_config_tool():
                 "Submit a v1 agent configuration for validation. Call this only "
                 "after the intent is classified and the elicitation slots "
                 "(tempo, risk, assets) are answered or defaulted. Use ONLY the "
-                "fields below — these are the only parameters the platform has."
+                "fields below — these are the only parameters the platform has. "
+                "To build SEVERAL agents from one shared strategy in a single "
+                "go, add `variants` (see its description)."
             ),
             "parameters": {
                 "type": "object",
@@ -140,9 +244,10 @@ def build_emit_config_tool():
                         "additionalProperties": False,
                         "required": ["archetype", "confidence"],
                         "properties": {
-                            "archetype": {"type": "string", "enum": list(ARCHETYPES),
-                                          "description": "internal classification only; never shown to the user"},
-                            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                            "archetype": {"type": "string",
+                                          "description": ("internal only, never shown to the user; "
+                                                          "one of: " + ", ".join(ARCHETYPES))},
+                            "confidence": {"type": "number", "description": "0-1"},
                             "signals_heard": {"type": "array", "items": {"type": "string"}},
                         },
                     },
@@ -152,29 +257,28 @@ def build_emit_config_tool():
                         "required": ["name", "assets", "candle_interval", "reward",
                                      "training_steps", "stop_loss", "take_profit",
                                      "max_trade", "min_trade"],
-                        "properties": {
-                            "name": {"type": "string", "maxLength": 40},
-                            "assets": {
-                                "type": "array",
-                                "minItems": MIN_ASSETS, "maxItems": MAX_ASSETS,
-                                "items": {"type": "string",
-                                          "enum": [a + QUOTE for a in SUPPORTED_ASSETS]},
-                            },
-                            "candle_interval": {"type": "string", "enum": list(CANDLE_INTERVALS)},
-                            "reward": {"type": "string", "enum": list(REWARDS)},
-                            "training_steps": {"type": "integer", "enum": list(TRAINING_STEPS)},
-                            "stop_loss": {"type": "number", "minimum": PCT_BOUNDS[0],
-                                          "maximum": PCT_BOUNDS[1],
-                                          "description": "fraction of position, 0.01-1.00"},
-                            "take_profit": {"type": "number", "minimum": PCT_BOUNDS[0],
-                                            "maximum": PCT_BOUNDS[1]},
-                            "max_trade": {"type": "number", "minimum": PCT_BOUNDS[0],
-                                          "maximum": PCT_BOUNDS[1],
-                                          "description": "max fraction of capital per order"},
-                            "min_trade": {"type": "number", "minimum": PCT_BOUNDS[0],
-                                          "maximum": PCT_BOUNDS[1],
-                                          "description": "min fraction of capital per order"},
+                        "properties": _config_field_properties(),
+                    },
+                    "variants": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": _config_field_properties(),
                         },
+                        "description": (
+                            "OPTIONAL. Use ONLY to build multiple agents from ONE "
+                            "shared strategy in a single request — most commonly "
+                            "one {\"assets\": [...]} entry per agent. Each entry "
+                            "inherits every field from `config` and overrides only "
+                            "what it names. Leave this out for a single agent. At "
+                            "most %d agents per request. Example — 'run 3 agents on "
+                            "different coins' -> variants:[{\"assets\":[\"BTCUSDT\"]},"
+                            "{\"assets\":[\"ETHUSDT\"]},{\"assets\":[\"SOLUSDT\"]}]. "
+                            "Do NOT use this for one agent that trades a basket of "
+                            "coins (that is a single `config` with several assets)."
+                            % MAX_AGENTS_PER_BATCH
+                        ),
                     },
                     "rationale": {
                         "type": "object",
