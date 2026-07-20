@@ -53,7 +53,12 @@ SYSTEM_PROMPT = (
     "strategies, risk management, and how to use the Roostoo platform — but "
     "you never give real-money financial advice or directives. "
     "Keep answers clear, concise, and educational, always grounded in the "
-    "Roostoo simulation context."
+    "Roostoo simulation context.\n\n"
+    "You have access to tools that let you act on the platform on the user's behalf. "
+    "IMPORTANT: before calling any action tool (create_trading_agent, join_competition), "
+    "you MUST first describe exactly what you are about to do and ask the user to confirm. "
+    "Only call a tool after the user explicitly agrees (e.g. 'yes', 'go ahead', 'do it'). "
+    "For read-only tools (get_my_portfolio) you may call them immediately without asking."
 )
 
 app = FastAPI()
@@ -114,10 +119,12 @@ async def coach(request: Request):
     # Two supported contracts:
     #   * This app's UI (public/assets/app.js): {"system": "...", "message": "..."}
     #     -> respond with PLAIN TEXT (app.js reads res.text()).
-    #   * Go backend: {"Messages": [{"Role","Content"}], "UserContext": {...}}
-    #     -> respond with JSON {"Reply", "ModelID"}.
+    #   * Go backend: {"Messages": [{"Role","Content","ToolCallId"?,"ToolName"?}],
+    #                  "UserContext": {...}, "Tools": [...]}
+    #     -> respond with JSON {"Reply", "ModelID"} or {"ToolCall": {...}, "ModelID"}.
     frontend_message = body.get("message")
-    go_messages = body.get("Messages", [])
+    go_messages      = body.get("Messages", [])
+    go_tools         = body.get("Tools", [])   # tool definitions from Go
 
     if frontend_message:
         mode = "text"
@@ -127,26 +134,70 @@ async def coach(request: Request):
         messages.append({"role": "user", "content": frontend_message})
     elif go_messages:
         mode = "json"
-        messages = [
-            {"role": m["Role"], "content": m["Content"]}
-            for m in go_messages
-            if m.get("Role") and m.get("Content")
-        ]
-        if not messages or messages[0]["role"] != "system":
-            messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+        # Build the OpenAI message list, handling all role types:
+        #   user / assistant (text) — standard
+        #   assistant (tool_call)   — ToolCallId + ToolName set, no content
+        #   tool                    — ToolCallId + ToolName set, content = result
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for m in go_messages:
+            role = (m.get("Role") or "").lower()
+            if not role:
+                continue
+
+            if role == "tool":
+                # Tool result message — must include tool_call_id for OpenAI
+                messages.append({
+                    "role":         "tool",
+                    "tool_call_id": m.get("ToolCallId", "call_unknown"),
+                    "content":      m.get("Content") or "",
+                })
+            elif role == "assistant" and m.get("ToolCallId"):
+                # Assistant message that requested a tool call (no text content)
+                messages.append({
+                    "role":    "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id":   m["ToolCallId"],
+                        "type": "function",
+                        "function": {
+                            "name":      m.get("ToolName", ""),
+                            "arguments": "{}",
+                        },
+                    }],
+                })
+            else:
+                content = m.get("Content") or ""
+                if content:
+                    messages.append({"role": role, "content": content})
     else:
         return JSONResponse({"error": "Missing message"}, status_code=400)
 
     if not KEY:
         return JSONResponse({"error": "Server has no API key configured."}, status_code=500)
 
+    # Convert Go tool definitions → OpenAI function-calling format
+    oai_tools = [
+        {
+            "type": "function",
+            "function": {
+                "name":        t["Name"],
+                "description": t["Description"],
+                "parameters":  t["Parameters"],
+            },
+        }
+        for t in go_tools
+        if t.get("Name")
+    ]
+
     payload = {
-        "model": MODEL,
-        "messages": messages,
+        "model":       MODEL,
+        "messages":    messages,
         "temperature": 0.4,
-        "max_tokens": 2000,
-        "stream": False,  # we buffer the full response for the guardrail
+        "max_tokens":  2000,
+        "stream":      False,  # buffer full response for guardrail + tool detection
     }
+    if oai_tools and mode == "json":
+        payload["tools"] = oai_tools
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -169,10 +220,33 @@ async def coach(request: Request):
                 return PlainTextResponse(msg, status_code=502)
             return JSONResponse({"error": msg}, status_code=502)
 
-        # OpenAI-style response: answer is at choices[0].message.content.
-        data = upstream.json()
+        data   = upstream.json()
+        choice = data["choices"][0]
+        finish = choice.get("finish_reason", "")
+
+        # ── Tool call path: LLM wants Go to execute a tool ────────────────────
+        if finish == "tool_calls" and mode == "json":
+            tc_list = choice["message"].get("tool_calls", [])
+            if tc_list:
+                tc   = tc_list[0]  # handle one tool call per turn
+                import json as _json
+                try:
+                    args = _json.loads(tc["function"].get("arguments") or "{}")
+                except Exception:
+                    args = {}
+                print(f"[coach][tool] LLM requested tool: {tc['function']['name']} args={args}")
+                return JSONResponse({
+                    "ToolCall": {
+                        "ToolCallId": tc["id"],
+                        "Name":       tc["function"]["name"],
+                        "Params":     args,
+                    },
+                    "ModelID": MODEL,
+                })
+
+        # ── Normal text response path ──────────────────────────────────────────
         try:
-            full = data["choices"][0]["message"]["content"] or ""
+            full = choice["message"]["content"] or ""
         except (KeyError, IndexError, TypeError):
             full = ""
 
