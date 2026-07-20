@@ -1,13 +1,23 @@
 """
-Coach Roostoo — Vercel serverless function (Groq / OpenAI-compatible).
-Lives at api/coach.py -> serves POST /api/coach automatically.
-Same logic as the old FastAPI server.py: build prompt -> call model ->
-screen output -> return text. Returns the full answer (no streaming).
+Coach Roostoo — Vercel serverless function.
+Lives at api/coach.py → serves /api/coach automatically.
 
-Env vars (set in the Vercel dashboard, NOT in code):
-  API_KEY  - your Groq API key
-  API_URL  - chat-completions endpoint (optional; defaults to Groq)
-  MODEL    - model name (optional; defaults to Groq's gpt-oss-20b)
+Supports TWO calling contracts:
+
+  1. UI / legacy  { "system": "...", "message": "..." }
+     → returns plain text (browser reads res.text())
+
+  2. Go backend   { "Messages": [{Role, Content, ToolCallId?, ToolName?}],
+                    "UserContext": {"UserId": 123},
+                    "Tools": [{Name, Description, Parameters}] }
+     → returns JSON  { "Reply": "..." , "ModelID": "..." }
+                  OR { "ToolCall": { "ToolCallId", "Name", "Params" }, "ModelID": "" }
+
+Env vars (set in Vercel dashboard):
+  API_KEY              - Groq (or OpenAI-compatible) API key
+  API_URL              - chat-completions endpoint (default: Groq)
+  MODEL                - model name
+  COACH_SERVICE_SECRET - shared secret validated via X-Internal-Token header
 """
 
 import os
@@ -17,13 +27,27 @@ import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler
 
-KEY = os.environ.get("API_KEY")
-API_URL = os.environ.get("API_URL", "https://api.groq.com/openai/v1/chat/completions")
-MODEL = os.environ.get("MODEL", "llama-3.3-70b-versatile")
+KEY            = os.environ.get("API_KEY")
+INTERNAL_TOKEN = os.environ.get("COACH_SERVICE_SECRET", "")
+API_URL        = os.environ.get("API_URL", "https://api.groq.com/openai/v1/chat/completions")
+MODEL          = os.environ.get("MODEL", "llama-3.3-70b-versatile")
 
-# ============================================================================
-# LAYER 3 — OUTPUT GUARDRAIL (identical to server.py)
-# ============================================================================
+# ── System prompt (Go contract path) ─────────────────────────────────────────
+SYSTEM_PROMPT = (
+    "You are Coach Roostoo, an expert trading educator inside the Roostoo "
+    "paper-trading simulator. You help users understand trading concepts, "
+    "strategies, risk management, and how to use the Roostoo platform — but "
+    "you never give real-money financial advice or directives. "
+    "Keep answers clear, concise, and educational, always grounded in the "
+    "Roostoo simulation context.\n\n"
+    "You have access to tools that let you act on the platform on the user's behalf. "
+    "IMPORTANT: before calling any action tool (create_trading_agent, join_competition), "
+    "you MUST first describe exactly what you are about to do and ask the user to confirm. "
+    "Only call a tool after the user explicitly agrees (e.g. 'yes', 'go ahead', 'do it'). "
+    "For read-only tools (get_my_portfolio) you may call them immediately without asking."
+)
+
+# ── Output guardrail ──────────────────────────────────────────────────────────
 REAL_ASSET = re.compile(
     r"\b(bitcoin|btc|ethereum|eth|crypto|stock|stocks|shares?|tesla|tsla|apple|aapl|s&p|sp500|nasdaq|forex|gold|real money|your portfolio|your money|your account)\b",
     re.IGNORECASE,
@@ -37,20 +61,6 @@ SIM_SCOPED = re.compile(
     re.IGNORECASE,
 )
 
-
-def crosses_line(text):
-    if not text:
-        return False
-    for s in re.split(r"(?<=[.!?\n])\s+", text):
-        if not DIRECTIVE.search(s):
-            continue
-        if SIM_SCOPED.search(s):
-            continue  # directive scoped to the sim -> allowed
-        if REAL_ASSET.search(s):
-            return True  # real-world directive about a real asset/money
-    return False
-
-
 SAFE_REDIRECT = (
     "I can't tell you what to do with real money or real assets — Coach Roostoo "
     "is here to help you learn inside the Roostoo simulator, where nothing is real. "
@@ -60,92 +70,208 @@ SAFE_REDIRECT = (
 )
 
 
+def crosses_line(text):
+    if not text:
+        return False
+    for s in re.split(r"(?<=[.!?\n])\s+", text):
+        if not DIRECTIVE.search(s):
+            continue
+        if SIM_SCOPED.search(s):
+            continue
+        if REAL_ASSET.search(s):
+            return True
+    return False
+
+
+def _call_llm(messages, tools=None):
+    """Call the LLM and return (data_dict, error_string)."""
+    payload = {
+        "model":       MODEL,
+        "messages":    messages,
+        "temperature": 0.4,
+        "max_tokens":  2000,
+        "stream":      False,
+    }
+    if tools:
+        payload["tools"] = tools
+
+    req = urllib.request.Request(
+        API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type":  "application/json",
+            "Authorization": "Bearer " + (KEY or ""),
+            "User-Agent":    "CoachRoostoo/2.0",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode("utf-8")), None
+    except urllib.error.HTTPError as e:
+        try:
+            detail = e.read()[:300].decode("utf-8", errors="replace")
+        except Exception:
+            detail = ""
+        rate = e.code == 429 or "rate limit" in detail.lower()
+        msg = ("rate-limited" if rate else f"provider error {e.code}")
+        print(f"[coach] LLM {msg}: {detail}")
+        return None, msg
+    except Exception as exc:
+        print("[coach] LLM error:", exc)
+        return None, str(exc)
+
+
 class handler(BaseHTTPRequestHandler):
-    def _send(self, code, text, ctype="text/plain; charset=utf-8"):
-        body = text.encode("utf-8")
+    def _send_json(self, code, obj):
+        body = json.dumps(obj).encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    # GET /api/coach -> health check
-    def do_GET(self):
-        self._send(
-            200,
-            json.dumps({"ok": True, "model": MODEL, "keySet": bool(KEY)}),
-            "application/json",
-        )
+    def _send_text(self, code, text):
+        body = text.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
-    # POST /api/coach -> the coach
+    def do_GET(self):
+        self._send_json(200, {"ok": True, "model": MODEL, "keySet": bool(KEY)})
+
     def do_POST(self):
+        # ── Auth: validate X-Internal-Token when secret is configured ─────────
+        if INTERNAL_TOKEN:
+            token = self.headers.get("X-Internal-Token", "")
+            if token != INTERNAL_TOKEN:
+                self._send_json(401, {"error": "Unauthorized"})
+                return
+
+        # ── Parse body ────────────────────────────────────────────────────────
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or "{}")
         except Exception:
-            self._send(400, "Invalid request body")
+            self._send_json(400, {"error": "Invalid JSON body"})
             return
 
-        system = body.get("system")
-        message = body.get("message")
-        if not message:
-            self._send(400, "Missing message")
-            return
         if not KEY:
-            self._send(500, "Server has no API key configured.")
+            self._send_json(500, {"error": "Server has no API key configured."})
             return
 
-        # OpenAI-compatible request: a "messages" array (system + user).
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": message})
+        # ── Detect contract: UI (legacy) vs Go backend ────────────────────────
+        frontend_message = body.get("message")
+        go_messages      = body.get("Messages", [])
+        go_tools         = body.get("Tools", [])
 
-        payload = json.dumps({
-            "model": MODEL,
-            "messages": messages,
-            "temperature": 0.4,
-            "max_tokens": 2000,
-            "stream": False,
-        }).encode("utf-8")
+        if frontend_message:
+            # ── UI / legacy path ──────────────────────────────────────────────
+            mode = "text"
+            messages = []
+            if body.get("system"):
+                messages.append({"role": "system", "content": body["system"]})
+            messages.append({"role": "user", "content": frontend_message})
+            oai_tools = None
 
-        req = urllib.request.Request(
-            API_URL,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + KEY,
-                "User-Agent": "CoachRoostoo/1.0",
-            },
-            method="POST",
-        )
+        elif go_messages:
+            # ── Go backend path ───────────────────────────────────────────────
+            mode = "json"
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            for m in go_messages:
+                role = (m.get("Role") or "").lower()
+                if not role:
+                    continue
+                if role == "tool":
+                    messages.append({
+                        "role":         "tool",
+                        "tool_call_id": m.get("ToolCallId", "call_unknown"),
+                        "content":      m.get("Content") or "",
+                    })
+                elif role == "assistant" and m.get("ToolCallId"):
+                    messages.append({
+                        "role":    "assistant",
+                        "content": None,
+                        "tool_calls": [{
+                            "id":   m["ToolCallId"],
+                            "type": "function",
+                            "function": {
+                                "name":      m.get("ToolName", ""),
+                                "arguments": "{}",
+                            },
+                        }],
+                    })
+                else:
+                    content = m.get("Content") or ""
+                    if content:
+                        messages.append({"role": role, "content": content})
 
+            oai_tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name":        t["Name"],
+                        "description": t["Description"],
+                        "parameters":  t["Parameters"],
+                    },
+                }
+                for t in go_tools
+                if t.get("Name")
+            ] or None
+
+        else:
+            self._send_json(400, {"error": "Missing message"})
+            return
+
+        # ── Call LLM ──────────────────────────────────────────────────────────
+        data, err = _call_llm(messages, tools=oai_tools if mode == "json" else None)
+        if err:
+            human = ("The coach is briefly rate-limited — try again in a few seconds."
+                     if "rate" in err else
+                     "The coach couldn't reach the model provider right now.")
+            if mode == "text":
+                self._send_text(502, human)
+            else:
+                self._send_json(502, {"error": human})
+            return
+
+        choice = data["choices"][0]
+        finish = choice.get("finish_reason", "")
+
+        # ── Tool call path ────────────────────────────────────────────────────
+        if finish == "tool_calls" and mode == "json":
+            tc_list = choice["message"].get("tool_calls", [])
+            if tc_list:
+                tc = tc_list[0]
+                try:
+                    args = json.loads(tc["function"].get("arguments") or "{}")
+                except Exception:
+                    args = {}
+                print(f"[coach][tool] LLM requested: {tc['function']['name']} args={args}")
+                self._send_json(200, {
+                    "ToolCall": {
+                        "ToolCallId": tc["id"],
+                        "Name":       tc["function"]["name"],
+                        "Params":     args,
+                    },
+                    "ModelID": MODEL,
+                })
+                return
+
+        # ── Normal text response ──────────────────────────────────────────────
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            try:
-                detail = e.read()[:300]
-            except Exception:
-                detail = b""
-            print("[coach] provider error:", e.code, detail)
-            self._send(502, "[error contacting model provider]")
-            return
-        except Exception as e:
-            print("[coach] error:", str(e))
-            self._send(500, "[server error]")
-            return
-
-        # OpenAI-style response: answer is at choices[0].message.content.
-        try:
-            full = data["choices"][0]["message"]["content"] or ""
+            full = choice["message"]["content"] or ""
         except (KeyError, IndexError, TypeError):
             full = ""
 
-        # ---- LAYER 3: screen the complete answer ----
         release = full.strip()
         if crosses_line(release):
-            print("[coach][guardrail] directive-on-real-asset detected — replacing response.")
+            print("[coach][guardrail] directive-on-real-asset detected — replacing.")
             release = SAFE_REDIRECT
 
-        self._send(200, release or "(no response)")
+        if mode == "text":
+            self._send_text(200, release or "(no response)")
+        else:
+            self._send_json(200, {"Reply": release or "(no response)", "ModelID": MODEL})
