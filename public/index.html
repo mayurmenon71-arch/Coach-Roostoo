@@ -148,6 +148,15 @@
   .gcBatch .gcard { margin-top: 0; }
   .gcBatchFoot { margin-top: 2px; }
   .gcLaunchAll { display: block; }
+  /* fan-out pager: one card at a time with ‹ › nav in the bottom-right */
+  .gcCarousel { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .gcSlides .gcard { margin-top: 0; }
+  .gcSlide[hidden] { display: none; }
+  .gcPager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 2px; }
+  .gcNav { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border2); background: var(--panel2); color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.12s, color 0.12s; }
+  .gcNav:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .gcNav:disabled { opacity: 0.3; cursor: default; }
+  .gcCount { font-family: var(--mono); font-size: 11px; color: var(--dim); min-width: 46px; text-align: center; }
   .chatSend { background: var(--accent); color: #0C1117; border: none; border-radius: 24px; padding: 0 20px; font-weight: 700; font-size: 13px; cursor: pointer; font-family: var(--display); text-transform: uppercase; letter-spacing: 0.073em; }
   .chatSend:hover { filter: brightness(1.05); }
 

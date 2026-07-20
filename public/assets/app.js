@@ -472,17 +472,26 @@
     return h + '</div>';
   }
 
-  // Render a fan-out (one strategy across several coins) as a stack of gene
-  // cards. Each card keeps its own launch button; a footer launches all at once.
+  // Render a fan-out (one strategy across several coins) as a PAGER: one card
+  // visible at a time with ‹ › nav in the bottom-right corner, so the user flips
+  // between configs instead of scrolling. Each card keeps its own launch button;
+  // a footer launches all at once.
   function geneCardBatchHtml(cards) {
-    const inner = (cards || []).map(geneCardHtml).join('');
-    const cfgs = (cards || []).map(c => c.config).filter(Boolean);
-    let foot = '';
-    if (cfgs.length > 1) {
-      foot = '<div class="gcBatchFoot"><button class="gcLaunch gcLaunchAll" data-act="gene-launch-all" ' +
-        "data-cfgs='" + escapeHtml(JSON.stringify(cfgs)) + "'>🚀 Launch all " + cfgs.length + " agents</button></div>";
-    }
-    return '<div class="gcBatch">' + inner + foot + '</div>';
+    cards = cards || [];
+    const n = cards.length;
+    if (n <= 1) return geneCardHtml(cards[0] || {});
+    const slides = cards.map((c, i) =>
+      '<div class="gcSlide"' + (i === 0 ? '' : ' hidden') + '>' + geneCardHtml(c) + '</div>').join('');
+    const pager =
+      '<div class="gcPager">' +
+        '<button class="gcNav" data-act="gene-prev" aria-label="Previous agent" disabled>‹</button>' +
+        '<span class="gcCount">1 / ' + n + '</span>' +
+        '<button class="gcNav" data-act="gene-next" aria-label="Next agent">›</button>' +
+      '</div>';
+    const cfgs = cards.map(c => c.config).filter(Boolean);
+    const foot = '<div class="gcBatchFoot"><button class="gcLaunch gcLaunchAll" data-act="gene-launch-all" ' +
+      "data-cfgs='" + escapeHtml(JSON.stringify(cfgs)) + "'>🚀 Launch all " + n + " agents</button></div>";
+    return '<div class="gcCarousel" data-i="0"><div class="gcSlides">' + slides + '</div>' + pager + foot + '</div>';
   }
 
   // Map a Coach v1 config onto the Strategy Lab controls (the fields that map
@@ -1196,6 +1205,25 @@
         toast('Launch failed — backend unreachable');
         el.disabled = false; el.textContent = label;
       });
+    }
+    else if (act === 'gene-prev' || act === 'gene-next') {
+      // Flip between the cards of a fan-out. DOM-only — must NOT rerender (that
+      // would rebuild the chat from state and reset the pager to the first card).
+      const car = el.closest('.gcCarousel');
+      if (!car) return;
+      const slides = Array.prototype.slice.call(car.querySelectorAll('.gcSlide'));
+      const n = slides.length;
+      if (!n) return;
+      let i = parseInt(car.dataset.i || '0', 10);
+      i = act === 'gene-next' ? Math.min(n - 1, i + 1) : Math.max(0, i - 1);
+      car.dataset.i = String(i);
+      slides.forEach((s, k) => { s.hidden = (k !== i); });
+      const count = car.querySelector('.gcCount');
+      if (count) count.textContent = (i + 1) + ' / ' + n;
+      const prev = car.querySelector('[data-act="gene-prev"]');
+      const next = car.querySelector('[data-act="gene-next"]');
+      if (prev) prev.disabled = (i === 0);
+      if (next) next.disabled = (i === n - 1);
     }
     else if (act === 'avatar') {
       const ov = $('#ovlAvatar');
