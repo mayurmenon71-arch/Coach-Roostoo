@@ -81,6 +81,23 @@ _ARCHETYPE_NOTE = {
 }
 
 
+def _fee_note(card):
+    """One plain-language sentence about fee drag when it's worth flagging.
+    Sourced from the deterministic breakeven preview — no LLM fee math. Silent
+    on low-drag agents; honest and specific on the fee-fragile ones."""
+    be = card.get("breakeven") or {}
+    drag = be.get("fee_drag")
+    monthly = be.get("monthly_hurdle_pct")
+    if drag == "High":
+        return ("One honest flag: at this clock it trades often, so it carries a "
+                "**high fee drag** — it has to clear about %g%% a month in costs "
+                "before it profits. A slower clock would ease that a lot." % monthly)
+    if drag == "Moderate":
+        return ("It trades at a moderate pace, so it needs to out-earn roughly "
+                "%g%% a month in fees before it's ahead — worth keeping in mind." % monthly)
+    return None
+
+
 def _closing_note(card):
     arch = (card.get("classification") or {}).get("archetype")
     parts = ["Here's **%s** — %s."
@@ -88,6 +105,9 @@ def _closing_note(card):
     note = _ARCHETYPE_NOTE.get(arch)
     if note:
         parts.append(note)
+    fee = _fee_note(card)
+    if fee:
+        parts.append(fee)
     parts.append("A strong backtest can overfit, so treat this as a starting "
                  "point — the live arena on unseen data is the real test.")
     return " ".join(parts)
@@ -112,6 +132,11 @@ def _batch_closing_note(cards):
     note = _ARCHETYPE_NOTE.get(arch)
     if note:
         parts.append(note)
+    # Same strategy across coins -> identical clock + personality -> one shared
+    # fee-drag note (take it from the first card).
+    fee = _fee_note(cards[0]) if cards else None
+    if fee:
+        parts.append(fee)
     parts.append("A strong backtest can overfit, so treat these as starting "
                  "points — the live arena on unseen data is the real test.")
     return " ".join(parts)

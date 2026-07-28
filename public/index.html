@@ -125,7 +125,10 @@
   .gcName { font-weight: 700; font-size: 13.5px; color: var(--text); }
   .gcBlurb { padding: 6px 12px 0; font-size: 12px; color: var(--muted); font-style: italic; }
   .gcTag { font-family: var(--mono); font-size: 10px; color: var(--accent); border: 1px solid rgba(254,219,41,0.4); border-radius: 24px; padding: 2px 8px; }
-  .gcDrag { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-left: auto; }
+  .gcDrag { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-left: auto; border: 1px solid var(--border2); border-radius: 24px; padding: 2px 8px; }
+  .gcDrag-low { color: var(--green); border-color: rgba(0,255,135,0.3); }
+  .gcDrag-moderate { color: var(--accent); border-color: rgba(254,219,41,0.4); }
+  .gcDrag-high { color: var(--orange); border-color: rgba(255,135,60,0.5); }
   .gcSec { padding: 8px 12px 2px; }
   .gcSec h5 { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--dim); margin: 4px 0 5px; font-weight: 700; }
   .gcRow { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); font-size: 12px; align-items: baseline; }
@@ -139,6 +142,10 @@
   .gcVal { flex-basis: 100%; margin-left: 62px; color: var(--text); font-family: var(--mono); font-size: 11.5px; word-break: break-word; overflow-wrap: anywhere; }
   .gcWhy { display: block; color: var(--dim); font-size: 10.5px; margin-top: 2px; font-style: italic; font-family: var(--body); word-break: normal; }
   .gcBreak { margin: 9px 12px; padding: 9px 11px; border: 1px solid rgba(255,135,60,0.35); border-radius: 7px; font-size: 11.5px; color: var(--orange); line-height: 1.5; }
+  .gcBreak-low { border-color: rgba(0,255,135,0.28); color: var(--green); }
+  .gcBreak-moderate { border-color: rgba(254,219,41,0.35); color: var(--accent); }
+  .gcBreak-high { border-color: rgba(255,135,60,0.5); color: var(--orange); }
+  .gcBreak b { color: var(--text); }
   .gcWarn { margin: 0 12px 9px; font-size: 11px; color: var(--orange); }
   .gcFoot { padding: 10px 12px 12px; border-top: 1px solid var(--border); }
   .gcLaunch { width: 100%; background: var(--accent); color: #0C1117; border: none; border-radius: 8px; padding: 11px 14px; font-family: var(--display); font-size: 14px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; transition: filter 0.14s; }

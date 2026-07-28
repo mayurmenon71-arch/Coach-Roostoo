@@ -446,8 +446,13 @@
   // Render a validated gene card (from a gene_card response) as a chat block.
   function geneCardHtml(card) {
     const tierBadge = t => '<span class="gcTier gc-' + t + '">' + t + '</span>';
-    let h = '<div class="gcard"><div class="gcHead">' +
-      '<span class="gcName">' + escapeHtml(card.name || 'Agent') + '</span></div>';
+    let head = '<span class="gcName">' + escapeHtml(card.name || 'Agent') + '</span>';
+    if (card.archetype) head += '<span class="gcTag">' + escapeHtml(card.archetype) + '</span>';
+    if (card.fee_drag) {
+      head += '<span class="gcDrag gcDrag-' + escapeHtml(card.fee_drag.toLowerCase()) +
+        '">fee drag: ' + escapeHtml(card.fee_drag) + '</span>';
+    }
+    let h = '<div class="gcard"><div class="gcHead">' + head + '</div>';
     if (card.blurb) h += '<div class="gcBlurb">' + escapeHtml(card.blurb) + '</div>';
     (card.sections || []).forEach(sec => {
       h += '<div class="gcSec"><h5>' + escapeHtml(sec.block) + '</h5>';
@@ -461,6 +466,11 @@
       });
       h += '</div>';
     });
+    if (card.breakeven && card.breakeven.explanation) {
+      h += '<div class="gcBreak gcBreak-' +
+        escapeHtml(String(card.breakeven.fee_drag || 'Low').toLowerCase()) +
+        '"><b>Breakeven preview</b> — ' + escapeHtml(card.breakeven.explanation) + '</div>';
+    }
     (card.warnings || []).forEach(w => {
       h += '<div class="gcWarn">⚠ ' + escapeHtml(w.path) + ': ' + escapeHtml(w.message) + '</div>';
     });
