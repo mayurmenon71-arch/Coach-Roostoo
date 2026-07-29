@@ -8,6 +8,7 @@ No internal reward-shaping math, no bps, no jargon.
 """
 
 from . import schema as S
+from .breakeven import estimate_for_config
 
 _FREQ_LABEL = {"1m": "every minute", "5m": "every 5 minutes", "15m": "every 15 minutes"}
 
@@ -58,15 +59,28 @@ def build_gene_card(config, rationale, classification, warnings=None):
              locked_reason="Trained on all available history for each coin."),
     ]
 
+    # Deterministic fee-hurdle (breakeven-alpha) preview — the paper's single
+    # best fee-education moment, computed in Python (never LLM math) so the
+    # number on the card is exact and gate-consistent. Both frontends already
+    # carry the styling for `archetype`, `fee_drag` and the `breakeven` band.
+    be = estimate_for_config(config, arch)
+    warnings = list(warnings or [])
+    if be.get("warning"):
+        warnings.append(be["warning"])
+
     return {
         "name": config.get("name"),
         "blurb": blurb,
         "classification": classification,
+        # User-safe personality word + fee-drag tier for the card header.
+        "archetype": be.get("archetype_label", "trading"),
+        "fee_drag": be.get("fee_drag", "Low"),
+        "breakeven": be,
         "sections": [
             {"block": "Your choices", "rows": choices},
             {"block": "Fixed by the platform", "rows": fixed},
         ],
-        "warnings": warnings or [],
+        "warnings": warnings,
         "config": config,
     }
 
@@ -75,7 +89,10 @@ def render_text(card):
     """Terminal rendering for the CLI demo / eyeball tests."""
     lines = ["=" * 64,
              "GENE CARD  ·  %s" % card["name"],
-             card["blurb"], "=" * 64]
+             card["blurb"],
+             "personality: %s   ·   fee drag: %s"
+             % (card.get("archetype", "trading"), card.get("fee_drag", "Low")),
+             "=" * 64]
     for sec in card["sections"]:
         lines.append("")
         lines.append("[%s]" % sec["block"])
@@ -85,6 +102,11 @@ def render_text(card):
             why = row.get("rationale") or row.get("locked_reason")
             if why:
                 lines.append("          -> %s" % why)
+    be = card.get("breakeven")
+    if be:
+        lines.append("")
+        lines.append("[Breakeven preview]")
+        lines.append("  %s" % be.get("explanation", ""))
     for w in card.get("warnings", []):
         lines.append("  ! %s: %s" % (w.get("path"), w.get("message")))
     return "\n".join(lines)
