@@ -123,11 +123,20 @@ def _call_llm(messages, tools=None):
 
 
 class handler(BaseHTTPRequestHandler):
+    def _cors(self):
+        # Allow browser clients on any origin (e.g. the published design) to call
+        # this stateless proxy. No cookies/credentials are used, so "*" is safe.
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Internal-Token")
+        self.send_header("Access-Control-Max-Age", "86400")
+
     def _send_json(self, code, obj):
         body = json.dumps(obj).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self._cors()
         self.end_headers()
         self.wfile.write(body)
 
@@ -136,8 +145,16 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self._cors()
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        # CORS preflight — browsers send this before the JSON POST.
+        self.send_response(204)
+        self._cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_GET(self):
         self._send_json(200, {"ok": True, "model": MODEL, "keySet": bool(KEY)})
@@ -169,10 +186,19 @@ class handler(BaseHTTPRequestHandler):
 
         if frontend_message:
             # ── UI / legacy path ──────────────────────────────────────────────
+            # Always apply the server-side coach persona + guardrail behaviour,
+            # regardless of what the client sends. An optional client `system`
+            # (e.g. runtime config context) is layered on top, and an optional
+            # `history` array carries prior turns for multi-turn memory.
             mode = "text"
-            messages = []
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
             if body.get("system"):
                 messages.append({"role": "system", "content": body["system"]})
+            for m in (body.get("history") or [])[-12:]:
+                role = (m.get("role") or "").lower()
+                content = m.get("content") or ""
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": content})
             messages.append({"role": "user", "content": frontend_message})
             oai_tools = None
 

@@ -29,6 +29,7 @@ import re
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (PlainTextResponse, JSONResponse, FileResponse,
                                RedirectResponse)
 from fastapi.staticfiles import StaticFiles
@@ -62,6 +63,17 @@ SYSTEM_PROMPT = (
 )
 
 app = FastAPI()
+
+# Allow browser clients on any origin (e.g. the published Roostoo design, or a
+# static export hosted elsewhere) to call this stateless proxy. No cookies or
+# credentials are used, so "*" is safe; the Groq key stays server-side. Handles
+# the CORS preflight (OPTIONS) automatically for the JSON POST from the UI.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ============================================================================
 # LAYER 3 — OUTPUT GUARDRAIL (provider-agnostic — screens text)
@@ -127,10 +139,19 @@ async def coach(request: Request):
     go_tools         = body.get("Tools", [])   # tool definitions from Go
 
     if frontend_message:
+        # UI / design chat path. Always apply the server-side coach persona +
+        # guardrail behaviour (so the browser can't opt out of them). An optional
+        # client `system` (e.g. runtime config context) is layered on top, and an
+        # optional `history` array carries prior turns for multi-turn memory.
         mode = "text"
-        messages = []
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         if body.get("system"):
             messages.append({"role": "system", "content": body["system"]})
+        for m in (body.get("history") or [])[-12:]:
+            role = (m.get("role") or "").lower()
+            content = m.get("content") or ""
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": frontend_message})
     elif go_messages:
         mode = "json"
