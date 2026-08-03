@@ -2,7 +2,7 @@
 Step 2 — retrieve(cards): RAG over the versioned knowledge cards.
 
 Retrieval here is not for coverage — the base model already knows what RSI
-is. It is for CONTROL: platform truths (fees, archetypes, competition rules,
+is. It is for CONTROL: platform truths (fees, signal families, competition rules,
 reward terms) that must be exactly right and traceable when a user — or a
 regulator — asks why Coach said what it said. Web-scale RAG would actively
 hurt (confident garbage + a prompt-injection surface + unauditable answers).

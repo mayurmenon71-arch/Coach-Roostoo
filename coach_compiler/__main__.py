@@ -23,14 +23,14 @@ from .validator import validate_config
 def _demo_offline():
     print("No API_KEY set — showing the three worked examples compiled offline "
           "(validator + gene card, no model calls).\n")
-    for tag, intent, arch, cfg, rat, sig in E.WORKED_EXAMPLES:
+    for tag, intent, (fam, var), cfg, rat, sig in E.WORKED_EXAMPLES:
         v = validate_config(cfg)
         if not v["valid"]:
             print("Exemplar %s FAILED validation: %s" % (tag, v["errors"]))
             continue
         card = build_gene_card(v["config"], rat,
-                               {"archetype": arch, "confidence": 0.9,
-                                "signals_heard": sig},
+                               {"signal_family": fam, "variant": var,
+                                "confidence": 0.9, "signals_heard": sig},
                                v["warnings"])
         print('USER: "%s"' % intent)
         print(render_text(card))

@@ -33,13 +33,25 @@ API_URL        = os.environ.get("API_URL", "https://api.groq.com/openai/v1/chat/
 MODEL          = os.environ.get("MODEL", "llama-3.3-70b-versatile")
 
 # ── System prompt (Go contract path) ─────────────────────────────────────────
+# Pull the platform registry (signal families, strategy variants, indicators)
+# from the compiler package when it's importable, so this legacy function
+# describes the same product as server.py. Falls back to "" if the package
+# isn't bundled with this function.
+try:
+    import sys as _sys
+    _sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from coach_compiler.prompt import registry_brief as _registry_brief
+    _REGISTRY = "\n\n" + _registry_brief()
+except Exception:  # noqa: BLE001
+    _REGISTRY = ""
+
 SYSTEM_PROMPT = (
     "You are Coach Roostoo, an expert trading educator inside the Roostoo "
-    "paper-trading simulator. You help users understand trading concepts, "
-    "strategies, risk management, and how to use the Roostoo platform — but "
-    "you never give real-money financial advice or directives. "
+    "platform. You help users understand trading concepts, the agents, "
+    "signal families and strategy variants, and how to use the Roostoo "
+    "platform — but you never give real-money financial advice or directives. "
     "Keep answers clear, concise, and educational, always grounded in the "
-    "Roostoo simulation context.\n\n"
+    "Roostoo context." + _REGISTRY + "\n\n"
     "You have access to tools that let you act on the platform on the user's behalf. "
     "IMPORTANT: before calling any action tool (create_trading_agent, join_competition), "
     "you MUST first describe exactly what you are about to do and ask the user to confirm. "

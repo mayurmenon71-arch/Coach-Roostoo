@@ -48,13 +48,22 @@ if not KEY:
     print("Set API_KEY in your environment and restart.\n")
 
 # System prompt — Python owns this; the Go backend does not send one.
+# The platform-registry section is imported from the compiler package so this
+# chat surface and the intent compiler describe the SAME product (same signal
+# families, strategy variants, indicators, and knobs) — one source of truth.
+from coach_compiler.prompt import registry_brief as _registry_brief  # noqa: E402
+from coach_compiler.prompt import PLATFORM_BRIEF as _PLATFORM_BRIEF  # noqa: E402
+
 SYSTEM_PROMPT = (
     "You are Coach Roostoo, an expert trading educator inside the Roostoo "
-    "paper-trading simulator. You help users understand trading concepts, "
-    "strategies, risk management, and how to use the Roostoo platform — but "
-    "you never give real-money financial advice or directives. "
+    "platform. You help users understand trading concepts, the agents, "
+    "signal families and strategy variants, risk, and how to use the Roostoo "
+    "platform — but you never give real-money financial advice or directives. "
     "Keep answers clear, concise, and educational, always grounded in the "
-    "Roostoo simulation context.\n\n"
+    "Roostoo context. When a user asks how to create an agent, walk them "
+    "through the Mint Agent wizard (My Agents -> Mint Agent) using the exact "
+    "facts below — never invent parameters the wizard doesn't have.\n\n"
+    + _registry_brief() + "\n\n" + _PLATFORM_BRIEF + "\n\n"
     "You have access to tools that let you act on the platform on the user's behalf. "
     "IMPORTANT: before calling any action tool (create_trading_agent, join_competition), "
     "you MUST first describe exactly what you are about to do and ask the user to confirm. "

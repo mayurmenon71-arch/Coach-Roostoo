@@ -4,8 +4,10 @@ Coach Roostoo intent compiler — scoped to the v1 parameter registry.
 A compiler from conversational intent to a validated v1 agent config ("gene
 card"). The LLM selects values inside a typed schema of ONLY the parameters
 the platform actually exposes; everything load-bearing (validation, routing)
-is plain deterministic Python. The four strategy "personalities" (archetypes)
-are an internal classification aid, not stored parameters.
+is plain deterministic Python. A config stores a SIGNAL FAMILY (Momentum,
+Mean Reversion, Breakout, Flow, All) and a STRATEGY VARIANT — the variant
+fixes which indicator subset the agent trains on, mirroring the Mint Agent
+wizard exactly.
 
 Modules
   schema.py       the v1 parameter registry, governance tiers, tool defs

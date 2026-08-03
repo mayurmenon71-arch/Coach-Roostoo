@@ -10,8 +10,9 @@ why simply: at that speed, trading fees eat the account alive
 which is more edge than almost anyone sustains. Speed there buys churn, not
 profit.
 
-Approved redirect: point "fast" users to a 1-minute agent that reacts to sharp
-pullbacks (mean-reversion) or to funding/liquidation spikes (flow-driven) — it
+Approved redirect: point "fast" users to a 1-minute agent that fades sharp
+pullbacks (the Mean Reversion family) or reacts to funding/liquidation spikes
+(the Flow family) — it
 feels responsive without bleeding out on fees. Also not supported: shorting
 (long-only for now), and buy-and-hold-for-months investing (competitions run
 hours to a week). A clear "can't do that, but here's the closest thing I can

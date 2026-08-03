@@ -52,14 +52,17 @@ def get_registry() -> dict:
         "candle_intervals": list(S.CANDLE_INTERVALS),
         "rewards": list(S.REWARDS),
         "training_steps": list(S.TRAINING_STEPS),
-        "pct_bounds": list(S.PCT_BOUNDS),
         "long_only": S.LONG_ONLY,
+        "signal_families": {f: S.FAMILY_LABEL[f] for f in S.SIGNAL_FAMILIES},
+        "variants": {code: {"family": v["family"], "title": v["title"],
+                            "indicators": list(v["indicators"])}
+                     for code, v in S.VARIANTS.items()},
+        "selectable_indicators": list(S.SELECTABLE_INDICATORS),
         "fixed": {
             "policy": S.POLICY, "lookback": S.LOOKBACK,
             "training_data": S.TRAINING_DATA,
-            "indicators": list(S.FIXED_INDICATORS),
+            "always_on_features": list(S.ALWAYS_ON_FEATURES),
         },
-        "personalities": list(S.ARCHETYPES),
     }
 
 
@@ -77,11 +80,11 @@ def retrieve_card(query: str, k: int = 3) -> list:
 
 
 @mcp.tool()
-def default_config(archetype: str, assets: list | None = None,
+def default_config(family: str, assets: list | None = None,
                    name: str | None = None) -> dict:
-    """Build a schema-valid v1 config from a personality's defaults.
-    archetype is one of: intraday_momentum, mean_reversion, breakout, flow_driven."""
-    return S.default_config_for(archetype, assets, name)
+    """Build a schema-valid v1 config from a signal family's defaults.
+    family is one of: MOM, MRV, BRK, FLW, ALL."""
+    return S.default_config_for(family, assets, name)
 
 
 # ── Compile: intent -> validated config + gene card (needs API_KEY) ─────────

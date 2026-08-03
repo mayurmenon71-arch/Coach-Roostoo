@@ -66,18 +66,20 @@ def _wants_build(messages):
     return not is_question(user[-1]["content"])
 
 
-# Per-archetype honest trade-off note, appended when the gene card is returned.
+# Per-family honest trade-off note, appended when the gene card is returned.
 # Templated (not a second LLM call) to keep a compile to a single round-trip.
-# Short, plain-language trade-off note per personality (no jargon, no math).
-_ARCHETYPE_NOTE = {
-    "intraday_momentum": "Expect flat, patient stretches in range-bound markets "
+# Short, plain-language trade-off note per signal family (no jargon, no math).
+_FAMILY_NOTE = {
+    "MOM": "Expect flat, patient stretches in range-bound markets "
         "— that's the trade-off for not chasing every wiggle.",
-    "mean_reversion": "By design it struggles in strong one-way trends — it's "
+    "MRV": "By design it struggles in strong one-way trends — it's "
         "betting on bounces, not chasing breakdowns.",
-    "breakout": "Real breakouts are rare, so it trades seldom and takes small "
+    "BRK": "Real breakouts are rare, so it trades seldom and takes small "
         "losses on false starts to catch the occasional big move.",
-    "flow_driven": "Those spikes are rare, so it sits quiet between events — its "
-        "live track record matters more than any single backtest.",
+    "FLW": "Those funding and flow events are rare, so it sits quiet between "
+        "them — its live track record matters more than any single backtest.",
+    "ALL": "Seeing every signal cuts both ways — a richer view, but more noise "
+        "for the policy to learn through.",
 }
 
 
@@ -98,11 +100,17 @@ def _fee_note(card):
     return None
 
 
+def _card_family(card):
+    """The card's signal family: prefer the validated config, fall back to the
+    model's classification."""
+    fam = (card.get("config") or {}).get("signal_family")
+    return fam or (card.get("classification") or {}).get("signal_family")
+
+
 def _closing_note(card):
-    arch = (card.get("classification") or {}).get("archetype")
     parts = ["Here's **%s** — %s."
              % (card.get("name"), card.get("blurb", "your agent"))]
-    note = _ARCHETYPE_NOTE.get(arch)
+    note = _FAMILY_NOTE.get(_card_family(card))
     if note:
         parts.append(note)
     fee = _fee_note(card)
@@ -124,12 +132,12 @@ def _batch_closing_note(cards):
     """Closing note for a fan-out of one strategy across several agents.
     Templated (no extra LLM call), like _closing_note, to keep a compile to a
     single round-trip under the provider's per-minute token budget."""
-    arch = (cards[0].get("classification") or {}).get("archetype") if cards else None
+    fam = _card_family(cards[0]) if cards else None
     per_agent = "; ".join(_card_coins(c) for c in cards)
     parts = ["Here are **%d agents** — the same strategy, one each on %s. They "
              "share every setting except the coins, so you can see which market "
              "it suits best." % (len(cards), per_agent)]
-    note = _ARCHETYPE_NOTE.get(arch)
+    note = _FAMILY_NOTE.get(fam)
     if note:
         parts.append(note)
     # Same strategy across coins -> identical clock + personality -> one shared
@@ -218,12 +226,14 @@ def run_create(messages, llm=None, ui_context=None):
                 config = args.get("config") or {}
                 rationale = args.get("rationale") or {}
                 classification = args.get("classification") or {}
-                variants = args.get("variants") or []
+                # `agents` is the fan-out list (one patch per agent); accept the
+                # legacy `variants` key too so an older prompt/model can't break.
+                agent_patches = args.get("agents") or args.get("variants") or []
 
                 # Fan one strategy out into N agents. The model authored ONE
                 # config + the per-agent differences; Python clones the base, so
                 # "same strategy across coins" is guaranteed here, not by the LLM.
-                configs = S.expand_configs(config, variants)[:S.MAX_AGENTS_PER_BATCH]
+                configs = S.expand_configs(config, agent_patches)[:S.MAX_AGENTS_PER_BATCH]
                 verdicts = [validate_config(c) for c in configs]
                 multi = len(configs) > 1
 

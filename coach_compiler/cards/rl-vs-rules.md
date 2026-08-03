@@ -11,10 +11,11 @@ point in exactly the space Roostoo exposes: RSI is an observation choice, 30
 is a threshold the policy can learn, "buy" is an action-space choice, and
 "until it reverts" is a reward choice.
 
-A strategy archetype is therefore a PRIOR, not a rule: a curated feature
-subset + a reward shape + action constraints + a cadence that bias the
-learned policy toward that family, while thresholds, sizing, and timing are
-learned from data. Every archetype ships with its fixed-rule twin as a
+A signal family + strategy variant is therefore a PRIOR, not a rule: the
+variant is a curated indicator subset, paired with a reward shape and a
+cadence, that biases the learned policy toward that family's style — while
+thresholds, sizing, and timing are learned from data. Each family ships with
+its fixed-rule twin as a
 mandatory benchmark in the same simulator with identical costs — "did
 learning add anything over the rule?" is always on the chart. LLMs do not
 belong in the execution loop: in the only public real-money arena (Alpha

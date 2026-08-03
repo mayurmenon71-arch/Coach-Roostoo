@@ -68,83 +68,93 @@ class TestBreakevenCalcPrimitive(unittest.TestCase):
 
 
 class TestConfigEstimate(unittest.TestCase):
-    def test_every_archetype_and_interval(self):
-        for arch in S.ARCHETYPES:
+    def test_every_family_and_interval(self):
+        for fam in S.SIGNAL_FAMILIES:
             for interval in ("15m", "5m", "1m"):
                 cfg = {"candle_interval": interval}
-                h = B.estimate_for_config(cfg, arch)
+                h = B.estimate_for_config(cfg, fam)
                 self.assertIn(h["fee_drag"], ("Low", "Moderate", "High"))
                 self.assertGreater(h["monthly_hurdle_pct"], 0)
                 self.assertTrue(h["explanation"])
                 self.assertIn("passes_screen", h)
 
+    def test_family_read_from_config_when_not_passed(self):
+        # estimate_for_config falls back to config.signal_family.
+        a = B.estimate_for_config({"candle_interval": "5m", "signal_family": "MRV"})
+        b = B.estimate_for_config({"candle_interval": "5m"}, "MRV")
+        self.assertEqual(a, b)
+
     def test_faster_clock_costs_more(self):
-        for arch in S.ARCHETYPES:
-            slow = B.estimate_for_config({"candle_interval": "15m"}, arch)
-            fast = B.estimate_for_config({"candle_interval": "1m"}, arch)
+        for fam in S.SIGNAL_FAMILIES:
+            slow = B.estimate_for_config({"candle_interval": "15m"}, fam)
+            fast = B.estimate_for_config({"candle_interval": "1m"}, fam)
             self.assertGreater(fast["cost_bps_per_day"], slow["cost_bps_per_day"])
 
     def test_momentum_15m_is_low_drag(self):
         # Section 6 fee-drag column: momentum = Low.
-        h = B.estimate_for_config({"candle_interval": "15m"}, "intraday_momentum")
+        h = B.estimate_for_config({"candle_interval": "15m"}, "MOM")
         self.assertEqual(h["fee_drag"], "Low")
         self.assertTrue(h["passes_screen"])
 
     def test_fast_mean_reversion_trips_screen(self):
-        # "The most fee-fragile arena archetype"; 1m cadence should fail the
+        # "The most fee-fragile" family; 1m cadence should fail the
         # breakeven screen and carry a warning to surface.
-        h = B.estimate_for_config({"candle_interval": "1m"}, "mean_reversion")
+        h = B.estimate_for_config({"candle_interval": "1m"}, "MRV")
         self.assertEqual(h["fee_drag"], "High")
         self.assertFalse(h["passes_screen"])
         self.assertIn("warning", h)
 
-    def test_unknown_archetype_falls_back(self):
+    def test_unknown_family_falls_back(self):
         h = B.estimate_for_config({"candle_interval": "5m"}, None)
         self.assertGreater(h["cost_bps_per_day"], 0)
-        self.assertEqual(h["archetype_label"], "trading")
+        self.assertEqual(h["family_label"], "trading")
 
     def test_bad_interval_falls_back_to_5m(self):
-        h = B.estimate_for_config({"candle_interval": "1h"}, "breakout")
+        h = B.estimate_for_config({"candle_interval": "1h"}, "BRK")
         self.assertEqual(h["decision_interval"], "5m")
 
     def test_deterministic(self):
         cfg = {"candle_interval": "5m"}
-        a = B.estimate_for_config(cfg, "flow_driven")
-        b = B.estimate_for_config(cfg, "flow_driven")
+        a = B.estimate_for_config(cfg, "FLW")
+        b = B.estimate_for_config(cfg, "FLW")
         self.assertEqual(a, b)
 
 
 class TestGeneCardIntegration(unittest.TestCase):
-    def _card(self, config, archetype):
-        return build_gene_card(config, {}, {"archetype": archetype})
+    def _card(self, config):
+        fam = config.get("signal_family")
+        return build_gene_card(config, {}, {"signal_family": fam,
+                                            "variant": config.get("variant")})
 
     def test_card_carries_breakeven_fields(self):
-        cfg = S.default_config_for("intraday_momentum", assets=["BTCUSDT"])
-        card = self._card(cfg, "intraday_momentum")
+        cfg = S.default_config_for("MOM", assets=["BTCUSDT"])
+        card = self._card(cfg)
         self.assertIn("breakeven", card)
         self.assertIn("fee_drag", card)
-        self.assertEqual(card["archetype"], "momentum")   # friendly, never the raw id
+        self.assertEqual(card["archetype"], "momentum")   # friendly, never a raw code
         self.assertTrue(card["breakeven"]["explanation"])
 
     def test_high_drag_config_adds_warning(self):
-        cfg = S.default_config_for("mean_reversion", assets=["SOLUSDT"])
+        cfg = S.default_config_for("MRV", assets=["SOLUSDT"])
         cfg["candle_interval"] = "1m"
-        card = self._card(cfg, "mean_reversion")
+        card = self._card(cfg)
         self.assertEqual(card["fee_drag"], "High")
         self.assertTrue(any(w.get("path") == "fee_hurdle" for w in card["warnings"]))
 
     def test_low_drag_config_has_no_fee_warning(self):
-        cfg = S.default_config_for("intraday_momentum", assets=["BTCUSDT"])
-        card = self._card(cfg, "intraday_momentum")
+        cfg = S.default_config_for("MOM", assets=["BTCUSDT"])
+        card = self._card(cfg)
         self.assertFalse(any(w.get("path") == "fee_hurdle" for w in card["warnings"]))
 
-    def test_never_leaks_underscored_archetype_id(self):
-        # TONE bans raw ids like "intraday_momentum"; a plain word ("breakout")
-        # is fine. Guard against the underscored ids leaking to the UI.
-        for arch in S.ARCHETYPES:
-            cfg = S.default_config_for(arch, assets=["BTCUSDT"])
-            card = self._card(cfg, arch)
+    def test_never_leaks_raw_family_code(self):
+        # TONE bans raw codes like "MOM"/"MRV1"; a plain word ("breakout")
+        # is fine. Guard against the codes leaking into the header tag.
+        for fam in S.SIGNAL_FAMILIES:
+            cfg = S.default_config_for(fam, assets=["BTCUSDT"])
+            card = self._card(cfg)
             self.assertNotIn("_", card["archetype"])
+            self.assertNotEqual(card["archetype"], fam)
+            self.assertEqual(card["archetype"], card["archetype"].lower())
 
 
 class TestScalpingRefusal(unittest.TestCase):

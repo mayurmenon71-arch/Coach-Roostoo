@@ -2,25 +2,28 @@
 The v1 parameter registry — the ONLY parameters the platform actually exposes.
 
 Coach compiles user intent into a config over exactly these fields; nothing
-else. The four strategy "personalities" (archetypes) are an internal
-classification aid — they help interpret intent and pick sensible v1 defaults,
-but they are NOT stored parameters and the gene card only ever shows real v1
-knobs.
+else. The registry mirrors the Roostoo Mint Agent wizard exactly:
 
-v1 registry (authoritative):
-  User-selectable : assets (1-10 of 21), training_steps {300k,350k,500k},
-                    reward {sharpe,sortino,calmar,entropy,volatility_penalty},
-                    candle_interval {5m,15m}, stop_loss %, take_profit %,
-                    max_trade % , min_trade %
+v1 registry (authoritative, = the Mint Agent wizard):
+  User-selectable : assets (1-12 of 12), signal_family {MOM,MRV,BRK,FLW,ALL},
+                    variant (one of the family's strategy variants — the
+                    variant fixes WHICH selectable indicators the agent sees),
+                    candle_interval {1m,5m,15m},
+                    training_steps {250k,300k,350k},
+                    reward {sharpe,sortino,calmar,entropy,volatility_penalty}
   Fixed (platform): PPO policy, continuous action space, 50-candle lookback,
-                    full historical training data, the 8-indicator bundle
-                    (all trained together, no subset selection)
+                    full historical training data, the 7 always-on base
+                    features (log-return, volume ratio, hour, weekday, cash
+                    ratio, position ratio, unrealized PnL)
 Long-only for now: no shorting on the platform yet.
+
+There are NO stop-loss / take-profit / trade-size knobs in this product: exits
+and sizing are learned by the policy and shaped by the reward choice.
 """
 
 # ── Governance tiers (for the gene card badges) ─────────────────────────────
 USER = "user"          # a choice the user owns
-COACH = "coach"        # inferred from intent within v1 ranges, user can change
+COACH = "coach"        # inferred from intent, user can change
 PLATFORM = "platform"  # fixed by the platform, not tunable
 
 # ── Fixed architecture (registry: Fixed / not user-selectable) ──────────────
@@ -28,21 +31,29 @@ POLICY = "PPO"
 ACTION_SPACE = "continuous target position"
 LOOKBACK = 50                      # candles in the observation
 TRAINING_DATA = "full available history per coin"
-FIXED_INDICATORS = ("RSI", "ATR", "VWAP", "MACD", "Stochastic RSI",
-                    "EMA Crossover", "Bollinger Bands", "OBV")
 LONG_ONLY = True                   # no shorting yet; flip when the platform enables it
 
-# ── Universe (registry: 1-10 of these) ──────────────────────────────────────
+# The 7 base features every agent always sees, on top of its variant's
+# indicator subset. Not toggleable.
+ALWAYS_ON_FEATURES = ("Log-return", "Volume ratio", "Hour", "Weekday",
+                      "Cash ratio", "Position ratio", "Unrealized PnL")
+
+# The 11 selectable indicators. An agent never picks these one by one — its
+# strategy VARIANT fixes the active subset (family ALL = all 11).
+SELECTABLE_INDICATORS = ("RSI", "MACD", "StochRSI", "EMA-X", "VWAP", "OBV",
+                         "Bollinger", "ATR", "ADX", "Donchian", "Funding")
+
+# ── Universe (registry: 1-12 of these) ──────────────────────────────────────
 SUPPORTED_ASSETS = (
-    "AAVE", "ADA", "AVAX", "BNB", "BTC", "DOGE", "DOT", "ETH", "FET", "HBAR",
-    "LINK", "LTC", "NEAR", "SHIB", "SOL", "SUI", "TRX", "UNI", "VET", "XLM", "XRP",
+    "BTC", "ETH", "XRP", "BNB", "SOL", "DOGE", "LINK", "TRX", "LTC", "SUI",
+    "ZEC", "XAUT",
 )
 QUOTE = "USDT"
 MIN_ASSETS = 1
-MAX_ASSETS = 10
+MAX_ASSETS = 12
 # Fan-out cap: at most this many agents compiled from ONE strategy in a single
 # request (e.g. "run an agent per coin"). Keeps a single ask from spawning a
-# training job for all 21 coins at once.
+# training job for every market at once.
 MAX_AGENTS_PER_BATCH = 6
 
 # Assignment order (majors first) for when a user asks for a COUNT of agents/coins
@@ -51,83 +62,161 @@ MAX_AGENTS_PER_BATCH = 6
 # configuration act, NOT investment advice. Must be a permutation of
 # SUPPORTED_ASSETS (asserted in tests).
 RECOMMENDED_ORDER = (
-    "BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT",
-    "TRX", "LTC", "UNI", "NEAR", "AAVE", "SUI", "XLM", "HBAR", "VET", "FET", "SHIB",
+    "BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "LINK", "LTC", "TRX", "SUI",
+    "ZEC", "XAUT",
 )
 
 # ── User-selectable knobs (discrete sets) ───────────────────────────────────
-TRAINING_STEPS = (300000, 350000, 500000)
+TRAINING_STEPS = (250000, 300000, 350000)
 REWARDS = ("sharpe", "sortino", "calmar", "entropy", "volatility_penalty")
 REWARD_LABEL = {
     "sharpe": "Sharpe Ratio", "sortino": "Sortino Ratio",
     "calmar": "Calmar Ratio", "entropy": "Entropy",
     "volatility_penalty": "Volatility Penalty",
 }
-CANDLE_INTERVALS = ("1m", "5m", "15m")  # 1m added on request (not in the base v1 registry)
+CANDLE_INTERVALS = ("1m", "5m", "15m")
 
-# ── Continuous knobs (fraction 0.01-1.00 of position / capital) ─────────────
-PCT_BOUNDS = (0.01, 1.00)          # stop_loss, take_profit, max_trade, min_trade
+# ── Signal families & strategy variants ─────────────────────────────────────
+# A config stores BOTH: the family (the strategy personality) and the variant
+# (which indicator subset the agent trains on). This mirrors the Mint Agent
+# wizard exactly: family -> variant -> the observation set is fixed by the
+# variant, never hand-picked indicator by indicator.
+SIGNAL_FAMILIES = ("MOM", "MRV", "BRK", "FLW", "ALL")
 
-ARCHETYPES = ("intraday_momentum", "mean_reversion", "breakout", "flow_driven")
-
-# Plain-language personality line shown in prose (never the raw id).
-ARCHETYPE_BLURB = {
-    "intraday_momentum": "a momentum-style agent that rides sustained moves and sits out the chop",
-    "mean_reversion": "a mean-reversion agent that buys pullbacks and takes profit as price snaps back",
-    "breakout": "a breakout agent that waits for quiet ranges and jumps on the expansion",
-    "flow_driven": "a flow-driven agent that reacts to funding swings and liquidation spikes",
+FAMILY_LABEL = {
+    "MOM": "Momentum",
+    "MRV": "Mean Reversion",
+    "BRK": "Breakout",
+    "FLW": "Flow",
+    "ALL": "All Indicators",
 }
 
-# Per-archetype v1 DEFAULTS (all within the registry ranges above). These are
+# Plain-language personality line shown in prose (never the raw code).
+FAMILY_BLURB = {
+    "MOM": "a momentum agent that rides sustained price trends",
+    "MRV": "a mean-reversion agent that fades stretched moves back to the mean",
+    "BRK": "a breakout agent that enters on range breakouts and expansions",
+    "FLW": "a flow agent that trades funding and order-flow signals",
+    "ALL": "an agent that blends every signal family, reading all 11 indicators",
+}
+
+# variant code -> {family, title, indicators}. The indicator tuples are the
+# EXACT observation subsets the wizard shows; family ALL has the one variant
+# that reads all 11 selectable indicators.
+VARIANTS = {
+    "MOM1": {"family": "MOM", "title": "Classic Cross",
+             "indicators": ("EMA-X", "MACD", "ATR")},
+    "MOM2": {"family": "MOM", "title": "Strength-Filtered",
+             "indicators": ("EMA-X", "ADX", "ATR")},
+    "MOM3": {"family": "MOM", "title": "Channel Rider",
+             "indicators": ("EMA-X", "Donchian", "ADX")},
+    "MOM4": {"family": "MOM", "title": "Volume-Confirmed",
+             "indicators": ("MACD", "OBV", "VWAP")},
+    "MOM5": {"family": "MOM", "title": "Momentum + Funding",
+             "indicators": ("EMA-X", "MACD", "Funding")},
+
+    "MRV1": {"family": "MRV", "title": "Band Fade",
+             "indicators": ("Bollinger", "RSI", "ATR")},
+    "MRV2": {"family": "MRV", "title": "VWAP Fade",
+             "indicators": ("VWAP", "StochRSI", "ATR")},
+    "MRV3": {"family": "MRV", "title": "Double Oscillator",
+             "indicators": ("RSI", "StochRSI", "Bollinger")},
+    "MRV4": {"family": "MRV", "title": "Volume Divergence",
+             "indicators": ("Bollinger", "OBV", "ATR")},
+    "MRV5": {"family": "MRV", "title": "Crowded Fade",
+             "indicators": ("Bollinger", "RSI", "Funding")},
+
+    "BRK1": {"family": "BRK", "title": "Channel Break",
+             "indicators": ("Donchian", "ATR", "OBV")},
+    "BRK2": {"family": "BRK", "title": "Squeeze Pop",
+             "indicators": ("Bollinger", "ATR", "Donchian")},
+    "BRK3": {"family": "BRK", "title": "Break + Volume Flow",
+             "indicators": ("Donchian", "OBV", "VWAP")},
+    "BRK4": {"family": "BRK", "title": "Funding-Fueled Break",
+             "indicators": ("Donchian", "Funding", "ATR")},
+    "BRK5": {"family": "BRK", "title": "Trend-Gated Break",
+             "indicators": ("Donchian", "ADX", "EMA-X")},
+
+    "FLW1": {"family": "FLW", "title": "Funding Lean",
+             "indicators": ("Funding", "VWAP", "ATR")},
+    "FLW2": {"family": "FLW", "title": "Carry + Trend",
+             "indicators": ("Funding", "EMA-X", "ADX")},
+    "FLW3": {"family": "FLW", "title": "Squeeze Watch",
+             "indicators": ("Funding", "Donchian", "ATR")},
+    "FLW4": {"family": "FLW", "title": "Flow + Volume",
+             "indicators": ("Funding", "OBV", "VWAP")},
+    "FLW5": {"family": "FLW", "title": "Full Flow",
+             "indicators": ("Funding", "RSI", "MACD", "OBV")},
+
+    "ALL":  {"family": "ALL", "title": "All Features",
+             "indicators": SELECTABLE_INDICATORS},
+}
+
+# family -> its variant codes, in wizard display order.
+FAMILY_VARIANTS = {
+    fam: tuple(code for code in
+               ("%s%d" % (fam, i) for i in range(1, 6))
+               if code in VARIANTS) or (("ALL",) if fam == "ALL" else ())
+    for fam in SIGNAL_FAMILIES
+}
+
+
+def variant_indicators(code):
+    """The exact indicator subset a variant trains on."""
+    v = VARIANTS.get(code)
+    return tuple(v["indicators"]) if v else ()
+
+
+# Per-family v1 DEFAULTS (all within the registry sets above). These are
 # starting points Coach adjusts from the user's words; every one is a real v1
-# knob. Percentages are fractions of position/capital.
-ARCHETYPE_DEFAULTS = {
-    "intraday_momentum": {
+# knob. The default variant is each family's first wizard entry.
+FAMILY_DEFAULTS = {
+    "MOM": {
+        "variant": "MOM1",                 # Classic Cross
         "candle_interval": "15m",          # calmer clock -> fewer whipsaws
         "reward": "sortino",               # rewards upside, punishes downside vol
-        "training_steps": 500000,
-        "stop_loss": 0.10, "take_profit": 0.25,
-        "max_trade": 0.40, "min_trade": 0.05,
+        "training_steps": 350000,
     },
-    "mean_reversion": {
+    "MRV": {
+        "variant": "MRV1",                 # Band Fade
         "candle_interval": "5m",
         "reward": "volatility_penalty",    # keeps it calm; averse to big swings
-        "training_steps": 350000,
-        "stop_loss": 0.04, "take_profit": 0.06,
-        "max_trade": 0.20, "min_trade": 0.02,
+        "training_steps": 300000,
     },
-    "breakout": {
+    "BRK": {
+        "variant": "BRK1",                 # Channel Break
         "candle_interval": "15m",
         "reward": "sortino",
-        "training_steps": 500000,
-        "stop_loss": 0.08, "take_profit": 0.30,
-        "max_trade": 0.50, "min_trade": 0.05,
+        "training_steps": 350000,
     },
-    "flow_driven": {
+    "FLW": {
+        "variant": "FLW1",                 # Funding Lean
         "candle_interval": "5m",
         "reward": "calmar",                # return over worst drawdown; tail-aware
-        "training_steps": 500000,
-        "stop_loss": 0.05, "take_profit": 0.15,
-        "max_trade": 0.30, "min_trade": 0.05,
+        "training_steps": 350000,
+    },
+    "ALL": {
+        "variant": "ALL",
+        "candle_interval": "5m",
+        "reward": "sharpe",
+        "training_steps": 300000,
     },
 }
 
 
-def default_config_for(archetype, assets=None, name=None):
-    """A schema-valid v1 config built purely from an archetype's defaults."""
-    if archetype not in ARCHETYPE_DEFAULTS:
-        raise ValueError("unknown archetype: %r" % (archetype,))
-    d = ARCHETYPE_DEFAULTS[archetype]
+def default_config_for(family, assets=None, name=None):
+    """A schema-valid v1 config built purely from a family's defaults."""
+    if family not in FAMILY_DEFAULTS:
+        raise ValueError("unknown signal family: %r" % (family,))
+    d = FAMILY_DEFAULTS[family]
     return {
-        "name": name or (archetype.replace("_", "-") + "-agent"),
+        "name": name or (FAMILY_LABEL[family].lower().replace(" ", "-") + "-agent"),
         "assets": list(assets or ["BTC" + QUOTE]),
+        "signal_family": family,
+        "variant": d["variant"],
         "candle_interval": d["candle_interval"],
         "reward": d["reward"],
         "training_steps": d["training_steps"],
-        "stop_loss": d["stop_loss"],
-        "take_profit": d["take_profit"],
-        "max_trade": d["max_trade"],
-        "min_trade": d["min_trade"],
     }
 
 
@@ -143,25 +232,26 @@ def _asset_suffix(assets):
     return "+".join(coins[:2]) + "+%d" % (len(coins) - 2)   # e.g. BTC+ETH+1
 
 
-def expand_configs(base, variants=None):
-    """Fan a single base config out into one config per variant.
+def expand_configs(base, agents=None):
+    """Fan a single base config out into one config per per-agent patch.
 
-    Each variant is a partial patch: it inherits every field from `base` and
-    overrides only the keys it sets (typically `assets`). With no variants this
-    returns ``[base]`` unchanged — so the single-agent path is untouched. When a
-    variant doesn't name itself, the agent is auto-named by its coin(s), and
-    names are de-duplicated so the roster never shows two identical labels.
+    Each entry in `agents` is a partial patch: it inherits every field from
+    `base` and overrides only the keys it sets (typically `assets`). With no
+    patches this returns ``[base]`` unchanged — so the single-agent path is
+    untouched. When a patch doesn't name itself, the agent is auto-named by its
+    coin(s), and names are de-duplicated so the roster never shows two
+    identical labels.
 
     This is the deterministic half of the fan-out: the model authors ONE
     strategy plus the per-agent differences; Python does the cloning, so "same
     strategy across coins" is guaranteed by code, not hoped for from the model.
     """
     base = dict(base or {})
-    if not variants:
+    if not agents:
         return [base]
     out, used = [], set()
     stem = base.get("name") or "agent"
-    for i, v in enumerate(variants):
+    for i, v in enumerate(agents):
         merged = dict(base)
         merged.update({k: val for k, val in (v or {}).items() if val is not None})
         if not (v or {}).get("name"):
@@ -179,9 +269,21 @@ def expand_configs(base, variants=None):
 
 # ── emit_config tool: exactly the v1 user-selectable knobs ──────────────────
 
+def _variant_menu():
+    """One compact line per family listing its variants + indicator subsets —
+    reused by the tool schema and the prompt so they can never drift apart."""
+    lines = []
+    for fam in SIGNAL_FAMILIES:
+        entries = ["%s %s (%s)" % (code, VARIANTS[code]["title"],
+                                   " + ".join(VARIANTS[code]["indicators"]))
+                   for code in FAMILY_VARIANTS[fam]]
+        lines.append("%s (%s): %s" % (fam, FAMILY_LABEL[fam], "; ".join(entries)))
+    return lines
+
+
 def _config_field_properties():
     """The v1 config field schemas — shared by emit_config's `config` object AND
-    each per-agent `variants` patch, so the two can never drift apart.
+    each per-agent `agents` patch, so the two can never drift apart.
 
     Deliberately NO value constraints (`enum`, `minimum`/`maximum`,
     `minItems`/`maxItems`, `maxLength`): value sets and ranges are stated in each
@@ -202,6 +304,17 @@ def _config_field_properties():
             "description": ("%d-%d coins, each EXACTLY one of: %s"
                             % (MIN_ASSETS, MAX_ASSETS, coins)),
         },
+        "signal_family": {
+            "type": "string",
+            "description": "one of: " + ", ".join(
+                "%s (%s)" % (f, FAMILY_LABEL[f]) for f in SIGNAL_FAMILIES),
+        },
+        "variant": {
+            "type": "string",
+            "description": ("a variant code belonging to signal_family — it fixes "
+                            "which indicators the agent sees. "
+                            + " | ".join(_variant_menu())),
+        },
         "candle_interval": {"type": "string",
                             "description": "one of: " + ", ".join(CANDLE_INTERVALS)},
         "reward": {"type": "string",
@@ -209,15 +322,6 @@ def _config_field_properties():
         "training_steps": {"type": "integer",
                            "description": "one of: "
                            + ", ".join(str(s) for s in TRAINING_STEPS)},
-        "stop_loss": {"type": "number",
-                      "description": "fraction of position, 0.01-1.00"},
-        "take_profit": {"type": "number",
-                        "description": "fraction of position, 0.01-1.00"},
-        "max_trade": {"type": "number",
-                      "description": "max fraction of capital per order, 0.01-1.00"},
-        "min_trade": {"type": "number",
-                      "description": ("min fraction of capital per order, 0.01-1.00; "
-                                      "must be <= max_trade")},
     }
 
 
@@ -229,10 +333,10 @@ def build_emit_config_tool():
             "description": (
                 "Submit a v1 agent configuration for validation. Call this only "
                 "after the intent is classified and the elicitation slots "
-                "(tempo, risk, assets) are answered or defaulted. Use ONLY the "
+                "(family, tempo, assets) are answered or defaulted. Use ONLY the "
                 "fields below — these are the only parameters the platform has. "
                 "To build SEVERAL agents from one shared strategy in a single "
-                "go, add `variants` (see its description)."
+                "go, add `agents` (see its description)."
             ),
             "parameters": {
                 "type": "object",
@@ -242,11 +346,15 @@ def build_emit_config_tool():
                     "classification": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["archetype", "confidence"],
+                        "required": ["signal_family", "variant", "confidence"],
                         "properties": {
-                            "archetype": {"type": "string",
-                                          "description": ("internal only, never shown to the user; "
-                                                          "one of: " + ", ".join(ARCHETYPES))},
+                            "signal_family": {"type": "string",
+                                              "description": ("internal only, never shown to the "
+                                                              "user; one of: "
+                                                              + ", ".join(SIGNAL_FAMILIES))},
+                            "variant": {"type": "string",
+                                        "description": ("the chosen variant code, e.g. MOM1 — "
+                                                        "must belong to signal_family")},
                             "confidence": {"type": "number", "description": "0-1"},
                             "signals_heard": {"type": "array", "items": {"type": "string"}},
                         },
@@ -254,12 +362,11 @@ def build_emit_config_tool():
                     "config": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["name", "assets", "candle_interval", "reward",
-                                     "training_steps", "stop_loss", "take_profit",
-                                     "max_trade", "min_trade"],
+                        "required": ["name", "assets", "signal_family", "variant",
+                                     "candle_interval", "reward", "training_steps"],
                         "properties": _config_field_properties(),
                     },
-                    "variants": {
+                    "agents": {
                         "type": "array",
                         "items": {
                             "type": "object",
@@ -273,7 +380,7 @@ def build_emit_config_tool():
                             "inherits every field from `config` and overrides only "
                             "what it names. Leave this out for a single agent. At "
                             "most %d agents per request. Example — 'run 3 agents on "
-                            "different coins' -> variants:[{\"assets\":[\"BTCUSDT\"]},"
+                            "different coins' -> agents:[{\"assets\":[\"BTCUSDT\"]},"
                             "{\"assets\":[\"ETHUSDT\"]},{\"assets\":[\"SOLUSDT\"]}]. "
                             "Do NOT use this for one agent that trades a basket of "
                             "coins (that is a single `config` with several assets)."
@@ -298,8 +405,9 @@ def build_retrieve_tool():
         "type": "function",
         "function": {
             "name": "retrieve",
-            "description": ("Look up Roostoo knowledge cards (strategies, "
-                            "indicators, reward metrics, platform mechanics)."),
+            "description": ("Look up Roostoo knowledge cards (signal families, "
+                            "strategy variants, indicators, reward metrics, "
+                            "platform mechanics)."),
             "parameters": {
                 "type": "object",
                 "required": ["query"],

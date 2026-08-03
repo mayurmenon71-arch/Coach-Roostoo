@@ -15,7 +15,7 @@ So this module is the one source of truth. The gene card renders its output; the
 Coach LLM never computes a fee number in prose (see prompt.py NUMBERS POLICY).
 
 ── The cost model ───────────────────────────────────────────────────────────
-A "position flip" (a full round trip: enter then exit) on Roostoo's perp venue
+A "position flip" (a full round trip: enter then exit) on Roostoo's venue
 costs taker fees on both sides plus spread and slippage. The paper pins this at
 "roughly 9-12 bps round-trip"; we build it from components so it stays auditable:
 
@@ -30,8 +30,8 @@ That reproduces the paper's own worked example exactly (Section 8.1):
 The paper's ``breakeven_calc`` keys off ``decision_interval`` + an explicit
 ``turnover_band``. The v1 registry (schema.py) exposes neither a turnover band
 nor a separate decision interval — it has ``candle_interval`` (the decision
-clock) and the four strategy personalities. So ``estimate_for_config`` derives an
-expected turnover from (candle_interval x archetype): each personality has a
+clock) and the signal families. So ``estimate_for_config`` derives an expected
+turnover from (candle_interval x signal family): each family has a
 characteristic trades-per-day profile, and a faster clock lifts it. This is the
 honest bridge — turnover is estimated, the cost per flip is exact — and it lets
 the already-scaffolded fee-drag band on the gene card light up for real configs.
@@ -40,7 +40,7 @@ the already-scaffolded fee-drag band on the gene card light up for real configs.
 from . import schema as S
 
 # ── Venue cost components (basis points) ────────────────────────────────────
-# Perp taker fee per side, plus half-spread and slippage the simulator's honest
+# Taker fee per side, plus half-spread and slippage the simulator's honest
 # cost model charges on a fill. Tunable in one place if the venue schedule moves.
 TAKER_FEE_BPS_PER_SIDE = 4.0
 SPREAD_BPS = 1.5
@@ -50,7 +50,7 @@ SLIPPAGE_BPS = 1.0
 ROUND_TRIP_COST_BPS = 2 * TAKER_FEE_BPS_PER_SIDE + SPREAD_BPS + SLIPPAGE_BPS  # 10.5
 
 # Decision steps per 24h for each cadence (used as the physical ceiling on how
-# often an agent could possibly flip). 30s/1m are the paper's gated fast band;
+# often an agent could possibly flip). 30s is the paper's gated fast band;
 # v1 exposes 1m/5m/15m.
 DECISION_STEPS_PER_DAY = {"30s": 2880, "1m": 1440, "5m": 288, "15m": 96}
 
@@ -65,28 +65,31 @@ TRADING_DAYS_PER_YEAR = 365
 FEE_DRAG_LOW_BPS = 25.0
 SCREEN_MAX_DAILY_BPS = 40.0
 
-# ── Expected round trips per day, by personality x decision clock ────────────
-# Anchored to the paper's archetype profiles (Section 4 / the Section 6 fee-drag
+# ── Expected round trips per day, by signal family x decision clock ──────────
+# Anchored to the paper's strategy profiles (Section 4 / the Section 6 fee-drag
 # column): momentum & breakout trade rarely (wide bands, long holds); mean
-# reversion is "the most fee-fragile" and churns; flow-driven is signal-paced.
-# A faster clock raises the count. These are deliberate, documented estimates —
-# the number that matters for gating (cost per flip) is exact.
-ARCHETYPE_ROUND_TRIPS_PER_DAY = {
-    "intraday_momentum": {"15m": 1.0, "5m": 2.0, "1m": 4.0},
-    "breakout":          {"15m": 0.7, "5m": 1.4, "1m": 2.8},
-    "flow_driven":       {"15m": 1.5, "5m": 3.0, "1m": 6.0},
-    "mean_reversion":    {"15m": 1.8, "5m": 3.5, "1m": 7.0},
+# reversion is "the most fee-fragile" and churns; flow is signal-paced; the
+# all-indicator blend sits in the middle. A faster clock raises the count.
+# These are deliberate, documented estimates — the number that matters for
+# gating (cost per flip) is exact.
+FAMILY_ROUND_TRIPS_PER_DAY = {
+    "MOM": {"15m": 1.0, "5m": 2.0, "1m": 4.0},
+    "BRK": {"15m": 0.7, "5m": 1.4, "1m": 2.8},
+    "FLW": {"15m": 1.5, "5m": 3.0, "1m": 6.0},
+    "MRV": {"15m": 1.8, "5m": 3.5, "1m": 7.0},
+    "ALL": {"15m": 1.2, "5m": 2.5, "1m": 5.0},
 }
-# Fallback profile when the archetype is unknown (a middle-of-the-road agent).
+# Fallback profile when the family is unknown (a middle-of-the-road agent).
 _DEFAULT_ROUND_TRIPS_PER_DAY = {"15m": 1.2, "5m": 2.5, "1m": 5.0}
 
 # Friendly, user-safe personality label for the gene card. The product never
-# shows raw archetype ids (see prompt.py TONE) — these plain words are fine.
-ARCHETYPE_LABEL = {
-    "intraday_momentum": "momentum",
-    "mean_reversion": "mean reversion",
-    "breakout": "breakout",
-    "flow_driven": "flow-driven",
+# shows raw family codes (see prompt.py TONE) — these plain words are fine.
+FAMILY_WORD = {
+    "MOM": "momentum",
+    "MRV": "mean reversion",
+    "BRK": "breakout",
+    "FLW": "flow",
+    "ALL": "all-signal",
 }
 
 
@@ -159,23 +162,29 @@ def _explanation(h, drag):
             % (lead, freq, h["round_trip_cost_bps"], h["monthly_hurdle_pct"]))
 
 
-def estimate_for_config(config, archetype=None):
+def estimate_for_config(config, family=None):
     """The v1 gene-card entry point. Derives expected turnover from
-    (candle_interval x archetype), runs the cost model, and returns a card-ready
-    block: the numbers, the fee-drag tier, a plain-language explanation, and a
-    ready-to-append warning when the config trips the breakeven screen.
+    (candle_interval x signal family), runs the cost model, and returns a
+    card-ready block: the numbers, the fee-drag tier, a plain-language
+    explanation, and a ready-to-append warning when the config trips the
+    breakeven screen.
 
     Never raises on a plausible v1 config: an unknown candle_interval falls back
-    to 5m and an unknown archetype to a middle profile, so this can run on any
+    to 5m and an unknown family to a middle profile, so this can run on any
     validated config without guarding the call site."""
-    interval = (config or {}).get("candle_interval")
+    config = config or {}
+    if family is None:
+        family = config.get("signal_family")
+    interval = config.get("candle_interval")
     if interval not in DECISION_STEPS_PER_DAY:
         interval = "5m"
-    table = ARCHETYPE_ROUND_TRIPS_PER_DAY.get(archetype, _DEFAULT_ROUND_TRIPS_PER_DAY)
+    table = FAMILY_ROUND_TRIPS_PER_DAY.get(family, _DEFAULT_ROUND_TRIPS_PER_DAY)
     round_trips_per_day = table.get(interval, _DEFAULT_ROUND_TRIPS_PER_DAY.get(interval, 2.5))
 
     h = _hurdle(round_trips_per_day, interval)
-    h["archetype_label"] = ARCHETYPE_LABEL.get(archetype, "trading")
+    h["family_label"] = FAMILY_WORD.get(family, "trading")
+    # Back-compat key: both frontends read this for the card header tag.
+    h["archetype_label"] = h["family_label"]
     h["explanation"] = _explanation(h, h["fee_drag"])
 
     # When the screen fails, hand back a warning the card can surface verbatim.
@@ -184,7 +193,7 @@ def estimate_for_config(config, archetype=None):
     if not h["passes_screen"]:
         h["warning"] = {
             "path": "fee_hurdle",
-            "message": ("At this clock this personality trades often, so it must "
+            "message": ("At this clock this strategy trades often, so it must "
                         "clear ~%g%%/month in fees before it profits. A slower "
                         "clock would cut that sharply."
                         % h["monthly_hurdle_pct"]),

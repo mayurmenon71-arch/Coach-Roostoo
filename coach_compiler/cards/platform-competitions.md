@@ -8,7 +8,7 @@ continuously, decide every 30 seconds to 15 minutes, and hold positions from
 tens of minutes up to a competition's end. Competitions run from a few hours
 to at most a week; agents are FORCED FLAT at competition end, so remaining
 time enters the observation vector. A few-hours competition mechanically
-favors faster archetypes; a week-long one lets multi-day holds breathe.
+favors faster strategies; a week-long one lets multi-day holds breathe.
 
 Excluded on both sides: high-frequency styles (market making, latency arb,
 delta-neutral basis — a latency race retail agents cannot win) and

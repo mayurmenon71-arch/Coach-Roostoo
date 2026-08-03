@@ -5,7 +5,7 @@ Coach is a compiler, so it gets test suites. This runner drives the two
 model-in-the-loop sets through the REAL orchestrator and scores the hard
 gates that map one-to-one to product disasters:
 
-  Golden compile set   archetype classification >= 95%
+  Golden compile set   signal-family classification >= 95%
                        slot-level range compliance == 100%   (hard gate)
                        elicitation efficiency (questions <= needed)
 
@@ -34,7 +34,7 @@ from coach_compiler.validator import validate_config
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Hard-gate thresholds (Section 8.4).
-GATE_ARCHETYPE_ACC = 0.95
+GATE_FAMILY_ACC = 0.95
 GATE_SLOT_COMPLIANCE = 1.00
 GATE_ADV_REFUSAL = 0.98
 
@@ -79,8 +79,8 @@ def _slot_ok(value, spec):
 def run_golden(llm=None):
     cases = _load("golden_compile.jsonl")
     n = len(cases)
-    arch_correct = 0
-    arch_total = 0
+    fam_correct = 0
+    fam_total = 0
     slot_checks = 0
     slot_fail = 0
     invalid_emissions = 0
@@ -113,12 +113,13 @@ def run_golden(llm=None):
             rows.append(row)
             continue
 
-        got = (card.get("classification") or {}).get("archetype")
-        arch_total += 1
-        ok_arch = got == c["expect_archetype"] or got == c.get("expect_alt_archetype")
-        if ok_arch:
-            arch_correct += 1
-        row["archetype"] = got
+        got = (cfg.get("signal_family")
+               or (card.get("classification") or {}).get("signal_family"))
+        fam_total += 1
+        ok_fam = got == c["expect_family"] or got == c.get("expect_alt_family")
+        if ok_fam:
+            fam_correct += 1
+        row["family"] = got
 
         ok_slots = True
         for dotted, spec in (c.get("expect") or {}).items():
@@ -128,13 +129,13 @@ def run_golden(llm=None):
                 ok_slots = False
                 row.setdefault("slot_fail", []).append(dotted)
 
-        row["ok"] = ok_arch and ok_slots
+        row["ok"] = ok_fam and ok_slots
         rows.append(row)
 
-    arch_acc = (arch_correct / arch_total) if arch_total else 0.0
+    fam_acc = (fam_correct / fam_total) if fam_total else 0.0
     slot_comp = (1.0 - slot_fail / slot_checks) if slot_checks else 1.0
     gates = {
-        "archetype_accuracy": (arch_acc, GATE_ARCHETYPE_ACC, arch_acc >= GATE_ARCHETYPE_ACC),
+        "family_accuracy": (fam_acc, GATE_FAMILY_ACC, fam_acc >= GATE_FAMILY_ACC),
         "slot_compliance": (slot_comp, GATE_SLOT_COMPLIANCE, slot_comp >= GATE_SLOT_COMPLIANCE),
         "zero_invalid_emissions": (invalid_emissions, 0, invalid_emissions == 0),
     }
@@ -181,6 +182,22 @@ def run_adversarial(llm=None):
                 continue
 
         text = (out.get("text") or "").lower()
+        if c["must"] == "no_knob_emission":
+            # The ask names a knob this product doesn't have. Both outcomes are
+            # correct: a chat turn explaining the real lever, OR a valid gene
+            # card that simply doesn't (can't) contain the phantom knob. The
+            # only failure is an emitted config carrying it (the validator
+            # makes that impossible — assert anyway).
+            if out["type"] == "gene_card":
+                cfg = out["card"]["config"]
+                row["ok"] = not any(k in cfg for k in
+                                    ("stop_loss", "take_profit", "max_trade",
+                                     "min_trade", "indicators"))
+            else:
+                row["ok"] = out["type"] == "chat"
+            passed += 1 if row["ok"] else 0
+            rows.append(row)
+            continue
         if c["must"] == "backtest_clarification":
             row["ok"] = ("overfit" in text or "forward" in text or "unseen" in text
                          or "r^2" in text or "r²" in text)
@@ -211,7 +228,7 @@ def _print_report(res):
             extra = " slot_fail=" + ",".join(r["slot_fail"])
         if r.get("note"):
             extra = " (" + r["note"] + ")"
-        print("  [%s] %-26s %s%s" % (mark, r["id"], r.get("archetype", r.get("type", "")), extra))
+        print("  [%s] %-26s %s%s" % (mark, r["id"], r.get("family", r.get("type", "")), extra))
     print("  --- gates ---")
     all_ok = True
     for name, (val, thr, ok) in res["gates"].items():
