@@ -38,6 +38,8 @@ def registry_brief():
 An agent is built in 4 steps: (1) pick asset models, (2) choose the feature set
 — a SIGNAL FAMILY and one of its STRATEGY VARIANTS, (3) set timing & reward,
 (4) review the backtest and launch.
+- There are exactly """ + str(len(S.SIGNAL_FAMILIES)) + """ signal families (""" + str(len([f for f in S.SIGNAL_FAMILIES if f != "ALL"])) + """ focused styles plus ALL) and """ + str(len(S.VARIANTS)) + """
+  strategy variants in total. If you state a count, use these numbers exactly.
 - Signal families and their strategy variants (the variant fixes WHICH
   indicators the agent sees — indicators are never picked one by one):
 """ + _variant_lines() + """
