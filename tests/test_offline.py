@@ -218,6 +218,72 @@ class TestKnowledge(unittest.TestCase):
         self.assertIn("family-flow",
                       [c["id"] for c in retrieve("funding rate liquidation cascade")])
 
+    def test_platform_questions_reach_the_right_card(self):
+        for query, card in (
+            ("how much does a competition cost", "platform-competitions"),
+            ("how do I reach Elite tier", "platform-tiers-bonus"),
+            ("how much XP do I earn per entry", "platform-xp-levels"),
+            ("how do payouts reach my wallet", "platform-wallets-payouts"),
+            ("what is roostoo", "platform-what-is-roostoo"),
+            ("how is my agent scored", "agent-benchmarks"),
+        ):
+            self.assertIn(card, [c["id"] for c in retrieve(query, 3)], query)
+
+
+# ── Grounding: platform facts must match https://roostoo.com/docs ───────────
+# These pin the numbers a user can check against the public docs. A wrong number
+# here is a hallucination shipped to production, so each one is asserted rather
+# than trusted to review.
+class TestPlatformFactGrounding(unittest.TestCase):
+    def setUp(self):
+        from coach_compiler.prompt import PLATFORM_BRIEF
+        self.brief = PLATFORM_BRIEF
+
+    def test_real_vs_simulated_is_stated(self):
+        # The single most important correction: real fees/payouts, VIRTUAL trading.
+        self.assertIn("$100,000", self.brief)
+        for phrase in ("non-custodial", "does NOT", "simulated exchange"):
+            self.assertIn(phrase, self.brief)
+
+    def test_competition_formats_and_fee_split(self):
+        for fact in ("1-day", "$5", "3-day", "$20", "70%", "30%", "60 minutes",
+                     "6 participants"):
+            self.assertIn(fact, self.brief, fact)
+
+    def test_tier_thresholds_present(self):
+        for fact in ("10", "40%", "+2%", "12%", "20", "55%", "+4%", "8%", "-5%"):
+            self.assertIn(fact, self.brief, fact)
+
+    def test_xp_monthly_rewards(self):
+        for fact in ("$500", "$250", "$100", "100 levels"):
+            self.assertIn(fact, self.brief, fact)
+
+    def test_chains_mapped_to_correct_currency(self):
+        # USDC on Base + Monad, USDT on BNB Chain — getting this backwards would
+        # send a user to the wrong chain with the wrong stablecoin.
+        self.assertRegex(self.brief, r"Base or Monad for USDC")
+        self.assertRegex(self.brief, r"BNB Chain for USDT")
+
+    def test_no_stale_or_invented_platform_claims(self):
+        low = self.brief.lower()
+        for wrong in ("30 seconds", "a week", "weekly competition", "7-day",
+                      "14-day", "custodial wallet", "we hold"):
+            self.assertNotIn(wrong, low, wrong)
+
+    def test_cards_do_not_contradict_the_brief(self):
+        # The old combined card duplicated these facts and drifted; it's gone.
+        import os
+        from coach_compiler.knowledge import CARDS_DIR
+        self.assertFalse(
+            os.path.exists(os.path.join(CARDS_DIR,
+                                        "platform-fees-tiers-xp-wallets.md")),
+            "superseded card must stay deleted — it contradicted the split cards")
+        with open(os.path.join(CARDS_DIR, "platform-competitions.md"),
+                  encoding="utf-8") as fh:
+            comp = fh.read().lower()
+        for wrong in ("30 seconds", "at most a week"):
+            self.assertNotIn(wrong, comp, wrong)
+
 
 # ── Router: Q&A vs build ────────────────────────────────────────────────────
 class TestRouter(unittest.TestCase):

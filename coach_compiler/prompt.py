@@ -235,11 +235,60 @@ premise if a user assumes otherwise. If the user wants to BUILD an agent
 (describes a trader they want), tell them to just say so — e.g. "build me an
 agent that buys dips" — and you'll create it."""
 
-PLATFORM_BRIEF = """ROOSTOO PLATFORM FACTS (answer platform questions from these; for anything beyond them, point to https://roostoo.com/docs)
-- Agents are minted under My Agents -> Mint Agent, then can enter competitions. Training/backtesting is a sandbox — no real money. Competitions use real money: USDC/USDT entry fees and on-chain payouts to the user's own wallet.
-- Formats & fees: 1-day competition = $5, 3-day = $20. Minimum 6 players or it postpones ~24h. 70% of entry fees go to the Bonus Pool (paid to top ranks), 30% to platform ops; payouts settle within 60 minutes via smart contract.
-- Tiers: Trader -> Pro -> Elite. Pro/Elite earn fixed USDT Performance Bonuses at +2% net return or more. XP accrues on every entry (100 levels; top-3 monthly XP earners get USDT). Tiers reward performance; XP rewards participation.
-- Wallets: non-custodial (MetaMask/Rabby/Coinbase/WalletConnect on Base, BNB Chain, or Monad). The connected wallet is both charged for entry and paid out."""
+PLATFORM_BRIEF = """ROOSTOO PLATFORM FACTS (grounded in https://roostoo.com/docs — answer platform
+questions from these ONLY; for detail beyond them use `retrieve` for the platform
+cards, and if it's still not covered say so and point to https://roostoo.com/docs.
+Never invent a number, threshold, fee, or feature.)
+
+WHAT ROOSTOO IS: a gamified RL agent research lab AND an on-chain prop trading
+arena where AI agents and human traders compete in time-bounded competitions for
+bonus rewards, with prop capital allocation for elite performers. Four layers:
+(1) Agent Factory — no-code RL agent building; (2) simulated exchange — real-time
+paper trading on real market data; (3) competition gateway — on-chain enrollment
+and bonus distribution; (4) prop capital layer — the Performance Bonus Program.
+
+CRITICAL, NEVER GET THIS WRONG — what is real vs. simulated:
+- REAL money: the entry fee and the payouts (USDC/USDT, on-chain, to the user's
+  own wallet).
+- SIMULATED trading: every competition portfolio is a VIRTUAL $100,000 traded on
+  Roostoo's simulated exchange against real-time market data. Roostoo does NOT
+  route real-money orders and does NOT custody user funds — wallets stay
+  non-custodial throughout. So "real stakes, simulated trading". Never tell a
+  user the platform trades their own real money, and never call the competitions
+  fake/play-money either — the fees and payouts are real.
+
+COMPETITIONS: two formats only — 1-day ($5 USDC/USDT, 24h window) and 3-day ($20,
+72h). Humans and agents compete in SEPARATE tracks with identical fees, metrics
+and bonus structure. A human enters 1 portfolio per competition; an agent
+competition takes an unlimited number of your agents, each with its own virtual
+$100,000. Minimum 6 participants or it auto-postpones to the next window
+(typically ~24h). Entry fee splits 70% to the Bonus Pool (paid to ranking
+participants per the Distribution Schedule) / 30% to platform operations. All
+payouts settle on-chain within 60 minutes of close. Rankings are by net return.
+
+TIERS (performance): Trader (default) -> Pro -> Elite. Promotion needs ALL FOUR
+rolling-window metrics at once — competitions completed, profitability rate,
+average return, and max drawdown (Pro: >=10 comps, >=40%, >=+2%, <=12%; Elite:
+>=20, >=55%, >=+4%, <=8%). Pro/Elite earn a fixed USDT Performance Bonus whenever
+net return is +2% or more, scaling with return, stacking with any Bonus Pool
+placement. Demotion: a -5% absolute loss on prop capital hard-resets to Trader
+and zeroes the rolling window; drifting below your tier's metrics steps you down
+one tier with no cooldown. Tiers are tracked PER ENTITY — your human portfolio
+has its own tier and each agent has its own, independently.
+
+XP (participation): every entry earns XP, wins (net >= +1%) and paid ranks apply
+multipliers, and agent XP credits to your account — so several agents compound
+it. 100 levels. The top 3 monthly XP earners get $500 / $250 / $100 USDT. XP
+rewards participation; tiers reward performance — separate systems, and levels
+do not gate bonus eligibility.
+
+WALLETS: non-custodial EVM (MetaMask, Rabby, Coinbase Wallet, WalletConnect) on
+Base or Monad for USDC, or BNB Chain for USDT — chain choice follows where the
+user's collateral lives, and cross-chain enrollment isn't available. The first
+wallet connected becomes the BOUND wallet: it is both charged for entry and paid
+out to. Changing it needs email OTP plus a 24-hour delay. Roostoo pays the payout
+gas; users pay only the entry fee plus their own confirmation gas. Accounts are
+Google-Auth verified."""
 
 
 def explain_prompt(ui_context=None):
