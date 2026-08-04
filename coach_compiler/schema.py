@@ -17,8 +17,11 @@ v1 registry (authoritative, = the Mint Agent wizard):
                     ratio, position ratio, unrealized PnL)
 Long-only for now: no shorting on the platform yet.
 
-There are NO stop-loss / take-profit / trade-size knobs in this product: exits
-and sizing are learned by the policy and shaped by the reward choice.
+Risk management (stop_loss, take_profit, max_trade, min_trade) is a DETERMINISTIC
+SAFETY LAYER above the learned policy, not part of the reward. It bounds the
+agent at execution time regardless of what the policy decided — which matters for
+out-of-distribution market states and for staying inside the -5% hard-demotion
+threshold in the tier system. See https://roostoo.com/docs risk-management.
 """
 
 # ── Governance tiers (for the gene card badges) ─────────────────────────────
@@ -75,6 +78,13 @@ REWARD_LABEL = {
     "volatility_penalty": "Volatility Penalty",
 }
 CANDLE_INTERVALS = ("1m", "5m", "15m")
+
+# ── Risk management (continuous percentages, per the docs' registry) ─────────
+# All four are 1%-100%. stop_loss / take_profit are percentages of the
+# competition portfolio's value at which it is auto-liquidated / auto-taken to
+# profit; max_trade / min_trade bound a single order as a % of agent capital.
+PCT_BOUNDS = (0.01, 1.00)
+RISK_FIELDS = ("stop_loss", "take_profit", "max_trade", "min_trade")
 
 # ── Signal families & strategy variants ─────────────────────────────────────
 # A config stores BOTH: the family (the strategy personality) and the variant
@@ -170,36 +180,51 @@ def variant_indicators(code):
 # Per-family v1 DEFAULTS (all within the registry sets above). These are
 # starting points Coach adjusts from the user's words; every one is a real v1
 # knob. The default variant is each family's first wizard entry.
+# Risk defaults follow the docs' "conservative for first-time users" guidance and
+# its practical heuristics: stop-loss 5-10% general exposure (tighter for
+# Elite-bound agents under the 8% drawdown threshold), take-profit often left
+# wide (20%+) so a run can extend, max trade 10-25% of capital, min trade not so
+# low that a fill can't move the needle.
 FAMILY_DEFAULTS = {
     "MOM": {
         "variant": "MOM1",                 # Classic Cross
         "candle_interval": "15m",          # calmer clock -> fewer whipsaws
         "reward": "sortino",               # rewards upside, punishes downside vol
         "training_steps": 350000,
+        "stop_loss": 0.10, "take_profit": 0.25,
+        "max_trade": 0.25, "min_trade": 0.05,
     },
     "MRV": {
         "variant": "MRV1",                 # Band Fade
         "candle_interval": "5m",
         "reward": "volatility_penalty",    # keeps it calm; averse to big swings
         "training_steps": 300000,
+        "stop_loss": 0.05, "take_profit": 0.10,
+        "max_trade": 0.15, "min_trade": 0.02,
     },
     "BRK": {
         "variant": "BRK1",                 # Channel Break
         "candle_interval": "15m",
         "reward": "sortino",
         "training_steps": 350000,
+        "stop_loss": 0.08, "take_profit": 0.30,
+        "max_trade": 0.25, "min_trade": 0.05,
     },
     "FLW": {
         "variant": "FLW1",                 # Funding Lean
         "candle_interval": "5m",
         "reward": "calmar",                # return over worst drawdown; tail-aware
         "training_steps": 350000,
+        "stop_loss": 0.05, "take_profit": 0.15,
+        "max_trade": 0.20, "min_trade": 0.05,
     },
     "ALL": {
         "variant": "ALL",
         "candle_interval": "5m",
         "reward": "sharpe",
         "training_steps": 300000,
+        "stop_loss": 0.08, "take_profit": 0.20,
+        "max_trade": 0.20, "min_trade": 0.05,
     },
 }
 
@@ -217,6 +242,10 @@ def default_config_for(family, assets=None, name=None):
         "candle_interval": d["candle_interval"],
         "reward": d["reward"],
         "training_steps": d["training_steps"],
+        "stop_loss": d["stop_loss"],
+        "take_profit": d["take_profit"],
+        "max_trade": d["max_trade"],
+        "min_trade": d["min_trade"],
     }
 
 
@@ -322,6 +351,17 @@ def _config_field_properties():
         "training_steps": {"type": "integer",
                            "description": "one of: "
                            + ", ".join(str(s) for s in TRAINING_STEPS)},
+        "stop_loss": {"type": "number",
+                      "description": ("auto-liquidate below this % of portfolio "
+                                      "value; fraction 0.01-1.00")},
+        "take_profit": {"type": "number",
+                        "description": ("auto-take-profit above this % of "
+                                        "portfolio value; fraction 0.01-1.00")},
+        "max_trade": {"type": "number",
+                      "description": "max fraction of capital per order, 0.01-1.00"},
+        "min_trade": {"type": "number",
+                      "description": ("min fraction of capital per order, 0.01-1.00; "
+                                      "must be <= max_trade")},
     }
 
 
@@ -363,7 +403,9 @@ def build_emit_config_tool():
                         "type": "object",
                         "additionalProperties": False,
                         "required": ["name", "assets", "signal_family", "variant",
-                                     "candle_interval", "reward", "training_steps"],
+                                     "candle_interval", "reward", "training_steps",
+                                     "stop_loss", "take_profit", "max_trade",
+                                     "min_trade"],
                         "properties": _config_field_properties(),
                     },
                     "agents": {

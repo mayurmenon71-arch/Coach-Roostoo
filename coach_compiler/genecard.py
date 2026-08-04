@@ -33,6 +33,9 @@ def build_gene_card(config, rationale, classification, warnings=None):
     def r(k):
         return rationale.get(k)
 
+    def pct(v):
+        return "%g%%" % (round(v * 100, 2))
+
     choices = [
         _row("assets", "Coins", ", ".join(config["assets"]), S.USER, r("assets")),
         _row("signal_family", "Signal family",
@@ -52,6 +55,13 @@ def build_gene_card(config, rationale, classification, warnings=None):
              S.COACH, r("reward")),
         _row("training_steps", "Training length", "%dk steps" % (config["training_steps"] // 1000),
              S.COACH, r("training_steps")),
+        _row("stop_loss", "Stop-loss", pct(config["stop_loss"]), S.USER, r("stop_loss")),
+        _row("take_profit", "Take-profit", pct(config["take_profit"]), S.USER,
+             r("take_profit")),
+        _row("max_trade", "Max per trade", pct(config["max_trade"]) + " of capital",
+             S.USER, r("max_trade")),
+        _row("min_trade", "Min per trade", pct(config["min_trade"]) + " of capital",
+             S.USER, r("min_trade")),
     ]
 
     fixed = [

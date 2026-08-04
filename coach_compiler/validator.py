@@ -11,6 +11,17 @@ from . import schema as S
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-]{0,39}$")
 
 
+def _pct(ctx, path, val):
+    lo, hi = S.PCT_BOUNDS
+    if not isinstance(val, (int, float)) or isinstance(val, bool):
+        ctx.err(path, "must be a number")
+        return None
+    if not (lo <= val <= hi):
+        ctx.err(path, "must be between %g%% and %g%%" % (lo * 100, hi * 100))
+        return None
+    return float(val)
+
+
 class _Ctx:
     def __init__(self):
         self.errors = []
@@ -74,12 +85,15 @@ def validate_config(config):
         ctx.err("training_steps", "must be one of %s"
                 % ", ".join("%dk" % (s // 1000) for s in S.TRAINING_STEPS))
 
-    # reject knobs this product does not have (defense in depth — the tool
-    # schema already omits them, but a drifted model may still emit them)
-    for gone in ("stop_loss", "take_profit", "max_trade", "min_trade"):
-        if gone in config:
-            ctx.err(gone, "this knob does not exist — exits and sizing are "
-                          "learned by the policy, not set by hand")
+    # risk management — the deterministic safety layer above the policy
+    sl = _pct(ctx, "stop_loss", config.get("stop_loss"))
+    tp = _pct(ctx, "take_profit", config.get("take_profit"))
+    mx = _pct(ctx, "max_trade", config.get("max_trade"))
+    mn = _pct(ctx, "min_trade", config.get("min_trade"))
+
+    # coherence
+    if mx is not None and mn is not None and mn > mx:
+        ctx.err("min_trade", "min trade per order can't exceed max trade per order")
 
     valid = not ctx.errors
     out = {"valid": valid, "errors": ctx.errors, "warnings": ctx.warnings}

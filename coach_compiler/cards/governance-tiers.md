@@ -5,7 +5,8 @@ tags: governance, user, coach, platform, fixed, gene card, who picks, can I chan
 ---
 On the gene card, each value is tagged by who controls it:
 
-- YOU choose: which coins the agent trades.
+- YOU choose: which coins the agent trades, and its risk settings — stop-loss,
+  take-profit, and the max/min trade size per order (each 1%-100%).
 - COACH suggests (you can change): the signal family and strategy variant
   (which together fix the indicators the agent sees), the decision frequency
   (1m, 5m or 15m), the reward metric, and the training length — inferred from

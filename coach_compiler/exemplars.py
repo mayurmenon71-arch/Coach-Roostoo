@@ -20,6 +20,10 @@ CONFIG_A = {
     "candle_interval": "15m",
     "reward": "sortino",
     "training_steps": 350000,
+    "stop_loss": 0.10,
+    "take_profit": 0.25,
+    "max_trade": 0.25,
+    "min_trade": 0.05,
 }
 RATIONALE_A = {
     "signal_family": "Riding big moves is the Momentum family's whole job.",
@@ -38,6 +42,10 @@ CONFIG_B = {
     "candle_interval": "5m",
     "reward": "volatility_penalty",
     "training_steps": 300000,
+    "stop_loss": 0.04,
+    "take_profit": 0.08,
+    "max_trade": 0.15,
+    "min_trade": 0.02,
 }
 RATIONALE_B = {
     "signal_family": "Buying dips and fading overreactions is the Mean Reversion family.",
@@ -57,6 +65,10 @@ CONFIG_C = {
     "candle_interval": "5m",
     "reward": "calmar",
     "training_steps": 350000,
+    "stop_loss": 0.05,
+    "take_profit": 0.15,
+    "max_trade": 0.20,
+    "min_trade": 0.05,
 }
 RATIONALE_C = {
     "signal_family": "Funding spikes and liquidation cascades are order-flow events — the Flow family reads exactly those.",
@@ -112,7 +124,9 @@ def exemplar_block():
                 "config": {"name": "TrendRider", "assets": ["BTCUSDT", "ETHUSDT"],
                            "signal_family": "MOM", "variant": "MOM1",
                            "candle_interval": "15m", "reward": "sortino",
-                           "training_steps": 350000},
+                           "training_steps": 350000, "stop_loss": 0.10,
+                           "take_profit": 0.25, "max_trade": 0.25,
+                           "min_trade": 0.05},
                 "rationale": {"variant": "Classic Cross is the standard momentum "
                               "setup: EMA crossover and MACD to spot the trend, "
                               "ATR to gauge how big the moves are.",
@@ -153,7 +167,9 @@ def exemplar_block():
                 "config": {"name": "TrendRider", "assets": ["BTCUSDT"],
                            "signal_family": "MOM", "variant": "MOM1",
                            "candle_interval": "15m", "reward": "sortino",
-                           "training_steps": 350000},
+                           "training_steps": 350000, "stop_loss": 0.10,
+                           "take_profit": 0.25, "max_trade": 0.25,
+                           "min_trade": 0.05},
                 "agents": [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]},
                            {"assets": ["SOLUSDT"]}],
                 "rationale": {"variant": "Classic Cross — EMA crossover + MACD "
@@ -175,7 +191,9 @@ def exemplar_block():
                 "config": {"name": "DipBuyer", "assets": ["BTCUSDT"],
                            "signal_family": "MRV", "variant": "MRV1",
                            "candle_interval": "5m", "reward": "volatility_penalty",
-                           "training_steps": 300000},
+                           "training_steps": 300000, "stop_loss": 0.04,
+                           "take_profit": 0.08, "max_trade": 0.15,
+                           "min_trade": 0.02},
                 "agents": [{"assets": ["BTCUSDT"]}, {"assets": ["ETHUSDT"]},
                            {"assets": ["SOLUSDT"]}, {"assets": ["BNBUSDT"]},
                            {"assets": ["XRPUSDT"]}],
@@ -191,12 +209,11 @@ def negative_exemplar_block():
     return """NEGATIVE EXEMPLARS (never do these)
 
 --- Wrong 1: inventing a parameter ---
-USER: Set the stop-loss at 5% and take profit at 20%.
-ASSISTANT (WRONG): emit_config with "stop_loss" and "take_profit" fields.
-WHY WRONG: those knobs don't exist in this product. Exits and sizing are
-LEARNED by the PPO policy and shaped by the reward choice. RIGHT: explain
-that, and point to the reward metric (e.g. volatility penalty or Calmar for
-drawdown-shyness) as the real lever they have.
+USER: Make it exit half the position at 2% profit.
+ASSISTANT (WRONG): emit_config with a "partial_take_profit" field.
+WHY WRONG: there's no such field — take-profit is all-or-nothing at the
+configured percentage. RIGHT: explain that exits are governed by the single
+take_profit percentage, and set take_profit within 1-100%.
 
 --- Wrong 2: exposing internal machinery ---
 USER: give me a momentum agent

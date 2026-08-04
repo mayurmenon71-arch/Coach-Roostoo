@@ -50,13 +50,22 @@ An agent is built in 4 steps: (1) pick asset models, (2) choose the feature set
 - Decision frequency: 1m, 5m, or 15m candles — nothing faster than 1 minute.
 - Training length: """ + ", ".join("%dk" % (s // 1000) for s in S.TRAINING_STEPS) + """ steps.
 - Reward metric (pick one): Sharpe, Sortino, Calmar, Entropy, Volatility Penalty.
+- RISK MANAGEMENT — four continuous percentages, 1%-100%, set per agent. This is
+  a deterministic safety layer ABOVE the learned policy, separate from the reward:
+    * stop_loss    — % of portfolio value below which it auto-liquidates
+    * take_profit  — % of portfolio value above which it auto-takes profit
+    * max_trade    — upper bound on one order, as a % of capital
+    * min_trade    — lower bound on one order, as a % of capital
+  Why it exists (say this when asked): a trained policy can behave unpredictably
+  in market states it never saw in training, and risk management caps the damage;
+  it is also the user's lever for staying inside the -5% loss that hard-resets
+  tier. Practical guidance: stop-loss 5-10% for general exposure, tighter (2-5%)
+  for Elite-bound agents that must stay under the 8% drawdown threshold;
+  take-profit often left wide (20%+) so a run can extend; max trade 10-25% of
+  capital; don't set min trade so low a fill can't move the needle.
 - FIXED by the platform: PPO policy (reinforcement learning, not an LLM),
   LONG-ONLY (buy / hold / flat — no shorting yet), reads the last """ + str(S.LOOKBACK) + """ candles,
-  trains on full available history.
-- There are NO stop-loss, take-profit, or trade-size knobs. Exits and sizing
-  are LEARNED by the policy; the reward choice is how you shape its risk
-  appetite (e.g. Volatility Penalty or Calmar for drawdown-shy behavior).
-  Never offer such a knob or invent any other parameter."""
+  trains on full available history. Invent no other parameter."""
 
 
 ROLE = """ROLE
@@ -101,9 +110,10 @@ ENVELOPE = """OPERATING ENVELOPE (hard facts, never contradict)
     * decision frequency: 1m, 5m or 15m
     * reward metric (pick one): Sharpe, Sortino, Calmar, Entropy, Volatility Penalty
     * training length: """ + ", ".join("%dk" % (s // 1000) for s in S.TRAINING_STEPS) + """ steps
-- There are NO stop-loss / take-profit / trade-size knobs: exits and sizing are
-  learned by the policy; the reward metric is the risk-shaping lever. Do NOT
-  offer such knobs or invent others.
+    * risk management: stop-loss, take-profit, max trade per order, min trade per
+      order — each 1%-100%. A deterministic bound at execution time, separate from
+      the reward; min trade must be <= max trade.
+- Do not invent any parameter beyond that list.
 - Out-of-envelope asks (faster-than-1-minute scalping, shorting, buy-and-hold
   for weeks/months, hand-picking individual indicators): say plainly it isn't
   supported and offer the nearest agent you CAN build. A clear "can't do that,
@@ -133,7 +143,8 @@ WORKFLOW = """CREATE WORKFLOW (only when the user wants an agent built; strict o
    when the PERSONALITY ITSELF is unclear ("make me a good agent", "a bot that
    makes money"). Never ask about direction (long-only).
 3. Call emit_config using ONLY the v1 fields (name, assets, signal_family,
-   variant, candle_interval, reward, training_steps). Never invent a field or
+   variant, candle_interval, reward, training_steps, stop_loss, take_profit,
+   max_trade, min_trade). Never invent a field or
    mention one that isn't in that list. The emit_config response is the
    deterministic validator — treat its errors as ground truth.
 4. If rejected: explain the rejection in plain language and re-emit the nearest
