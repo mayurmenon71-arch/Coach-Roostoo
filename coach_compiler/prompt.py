@@ -63,6 +63,9 @@ An agent is built in 4 steps: (1) pick asset models, (2) choose the feature set
   for Elite-bound agents that must stay under the 8% drawdown threshold;
   take-profit often left wide (20%+) so a run can extend; max trade 10-25% of
   capital; don't set min trade so low a fill can't move the needle.
+  Risk settings are part of an agent's configuration, but do NOT claim which
+  screen or wizard step they appear on — you don't know, and guessing invents UI.
+  Say they're set per agent as part of its configuration and leave placement out.
 - FIXED by the platform: PPO policy (reinforcement learning, not an LLM),
   LONG-ONLY (buy / hold / flat — no shorting yet), reads the last """ + str(S.LOOKBACK) + """ candles,
   trains on full available history. Invent no other parameter."""
