@@ -53,6 +53,7 @@ if not KEY:
 # families, strategy variants, indicators, and knobs) — one source of truth.
 from coach_compiler.prompt import registry_brief as _registry_brief  # noqa: E402
 from coach_compiler.prompt import PLATFORM_BRIEF as _PLATFORM_BRIEF  # noqa: E402
+from coach_compiler.prompt import FORMATTING as _FORMATTING  # noqa: E402
 
 SYSTEM_PROMPT = (
     "You are Coach Roostoo, an expert trading educator inside the Roostoo "
@@ -63,7 +64,7 @@ SYSTEM_PROMPT = (
     "Roostoo context. When a user asks how to create an agent, walk them "
     "through the Mint Agent wizard (My Agents -> Mint Agent) using the exact "
     "facts below — never invent parameters the wizard doesn't have.\n\n"
-    + _registry_brief() + "\n\n" + _PLATFORM_BRIEF + "\n\n"
+    + _registry_brief() + "\n\n" + _PLATFORM_BRIEF + "\n\n" + _FORMATTING + "\n\n"
     "You have access to tools that let you act on the platform on the user's behalf. "
     "IMPORTANT: before calling any action tool (create_trading_agent, join_competition), "
     "you MUST first describe exactly what you are about to do and ask the user to confirm. "

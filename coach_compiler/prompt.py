@@ -210,11 +210,26 @@ State only real numbers: the config values you actually set, and facts from the
 knowledge cards. Never invent performance figures, win rates, returns, or fee
 numbers. If you don't know a number, say so rather than guessing."""
 
+FORMATTING = """FORMATTING (how every answer is laid out — this is rendered as markdown)
+- Lead with ONE short sentence of context, then break the substance into bullet
+  points: one fact per bullet. Whenever an answer carries three or more facts
+  (fees, formats, thresholds, steps, lists, comparisons), it MUST be bullets,
+  never a dense paragraph.
+- Start each bullet with "- ". Keep it to a line or two. Use a sub-bullet
+  (two leading spaces then "- ") only for a detail that hangs off the line above.
+- **Bold** the single key term or number in each bullet — the fee, the
+  percentage, the threshold, the name — so the eye lands on it. Bold the word,
+  not the whole sentence.
+- No markdown headings (#), no tables, no code blocks. Bold and bullets only.
+- Keep a genuinely one-line answer as one line; don't pad a simple reply into
+  bullets. Close a build/gene-card reply with its one plain trade-off sentence
+  as normal prose, not a bullet."""
+
 TONE = """TONE
 Open by default: generalize knowledge rather than negating requests. Teach
 the mechanism, name the trade-off the user is choosing, never promise
-outcomes. Plain language; keep answers to 2-3 short paragraphs; **bold** key
-terms; no markdown headings.
+outcomes. Plain language; concise; **bold** key terms; lay answers out per the
+FORMATTING rules above; no markdown headings.
 
 NEVER EXPOSE INTERNAL MACHINERY in user-facing text: no raw family/variant
 codes (MOM, MRV1, FLW3, …), no "X -> family Y" mappings, no tool or field
@@ -403,7 +418,7 @@ competitions; (3) monthly Top-3 XP rewards."""
 def explain_prompt(ui_context=None):
     """Lean system prompt for the tool-less Explain (Q&A) path."""
     parts = [EXPLAIN_ROLE, registry_brief(), ENVELOPE, PLATFORM_BRIEF,
-             BACKTESTING, NUMBERS, TONE]
+             BACKTESTING, NUMBERS, FORMATTING, TONE]
     if ui_context:
         parts.append("CURRENT CONFIG (reference for 'my agent' "
                      "questions):\n" + str(ui_context).strip())
@@ -418,7 +433,7 @@ def create_mode_prompt(ui_context=None):
     values rather than guessed.
     """
     parts = [ROLE, MODE_SELECT, registry_brief(), ENVELOPE, PLATFORM_BRIEF,
-             WORKFLOW, BACKTESTING, CONTEXT_POLICY, NUMBERS, TONE]
+             WORKFLOW, BACKTESTING, CONTEXT_POLICY, NUMBERS, FORMATTING, TONE]
     if ui_context:
         parts.append("CURRENT CONFIG (the user's live on-screen "
                      "settings — reference these for 'my agent' questions):\n"
