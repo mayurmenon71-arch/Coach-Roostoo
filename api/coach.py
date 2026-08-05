@@ -41,7 +41,8 @@ try:
     import sys as _sys
     _sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from coach_compiler.prompt import registry_brief as _registry_brief
-    _REGISTRY = "\n\n" + _registry_brief()
+    from coach_compiler.prompt import PLATFORM_BRIEF as _PLATFORM_BRIEF
+    _REGISTRY = "\n\n" + _registry_brief() + "\n\n" + _PLATFORM_BRIEF
 except Exception:  # noqa: BLE001
     _REGISTRY = ""
 

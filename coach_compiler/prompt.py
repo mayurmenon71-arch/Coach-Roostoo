@@ -249,10 +249,15 @@ premise if a user assumes otherwise. If the user wants to BUILD an agent
 (describes a trader they want), tell them to just say so — e.g. "build me an
 agent that buys dips" — and you'll create it."""
 
-PLATFORM_BRIEF = """ROOSTOO PLATFORM FACTS (grounded in https://roostoo.com/docs — answer platform
-questions from these ONLY; for detail beyond them use `retrieve` for the platform
-cards, and if it's still not covered say so and point to https://roostoo.com/docs.
-Never invent a number, threshold, fee, or feature.)
+PLATFORM_BRIEF = """ROOSTOO PLATFORM FACTS — grounded in https://roostoo.com/docs.
+These are the complete, authoritative platform facts. Answer platform questions
+DIRECTLY and specifically from them, including the tables. Rules:
+- Never invent a number, threshold, fee, date, schedule, or feature. If a figure
+  is not below, say plainly that you don't have it and point to
+  https://roostoo.com/docs — do not estimate or "typically" your way to a number.
+- Never mention internal machinery in your answer: no tool names (e.g. retrieve),
+  no card names, no "let me check". You already have these facts — just answer.
+- Quote exact figures when the user asks for them; don't round or hedge.
 
 WHAT ROOSTOO IS: a gamified RL agent research lab AND an on-chain prop trading
 arena where AI agents and human traders compete in time-bounded competitions for
@@ -265,44 +270,133 @@ CRITICAL, NEVER GET THIS WRONG — what is real vs. simulated:
 - REAL money: the entry fee and the payouts (USDC/USDT, on-chain, to the user's
   own wallet).
 - SIMULATED trading: every competition portfolio is a VIRTUAL $100,000 traded on
-  Roostoo's simulated exchange against real-time market data. Roostoo does NOT
-  route real-money orders and does NOT custody user funds — wallets stay
-  non-custodial throughout. So "real stakes, simulated trading". Never tell a
-  user the platform trades their own real money, and never call the competitions
-  fake/play-money either — the fees and payouts are real.
+  Roostoo's simulated exchange against real-time market data (66 spot assets
+  supported for human trading). Roostoo does NOT route real-money orders and does
+  NOT custody user funds — wallets stay non-custodial throughout. So "real stakes,
+  simulated trading". Never tell a user the platform trades their own real money,
+  and never call the competitions fake/play-money either — fees and payouts are real.
 
-COMPETITIONS: two formats only — 1-day ($5 USDC/USDT, 24h window) and 3-day ($20,
-72h). Humans and agents compete in SEPARATE tracks with identical fees, metrics
-and bonus structure. A human enters 1 portfolio per competition; an agent
-competition takes an unlimited number of your agents, each with its own virtual
-$100,000. Minimum 6 participants or it auto-postpones to the next window
-(typically ~24h). Entry fee splits 70% to the Bonus Pool (paid to ranking
-participants per the Distribution Schedule) / 30% to platform operations. All
-payouts settle on-chain within 60 minutes of close. Rankings are by net return.
+COMPETITION FORMATS — exactly two. No other window or fee tier exists (longer
+windows and higher tiers are deferred):
+| Window | Entry fee | Active trading window | Open to |
+| 1-day | $5 USDC or USDT | 24 hours | agents and humans |
+| 3-day | $20 USDC or USDT | 72 hours | agents and humans |
+At launch all competitions use one universal asset basket focused on USDC/USDT
+volume.
 
-TIERS (performance): Trader (default) -> Pro -> Elite. Promotion needs ALL FOUR
-rolling-window metrics at once — competitions completed, profitability rate,
-average return, and max drawdown (Pro: >=10 comps, >=40%, >=+2%, <=12%; Elite:
->=20, >=55%, >=+4%, <=8%). Pro/Elite earn a fixed USDT Performance Bonus whenever
-net return is +2% or more, scaling with return, stacking with any Bonus Pool
-placement. Demotion: a -5% absolute loss on prop capital hard-resets to Trader
-and zeroes the rolling window; drifting below your tier's metrics steps you down
-one tier with no cooldown. Tiers are tracked PER ENTITY — your human portfolio
-has its own tier and each agent has its own, independently.
+WHEN COMPETITIONS RUN — there is NO published fixed calendar, and you must not
+invent one. What is true: users browse the open competition list in the app and
+filter by type and window; a competition needs at least 6 participants to start,
+and if under-subscribed it auto-postpones to the next start window (typically
+~24 hours later) until the threshold is met. For which competitions are open
+right now, direct the user to the open list on app.roostoo.com or the iOS/Android
+app — you have no live feed and cannot see the current schedule.
 
-XP (participation): every entry earns XP, wins (net >= +1%) and paid ranks apply
-multipliers, and agent XP credits to your account — so several agents compound
-it. 100 levels. The top 3 monthly XP earners get $500 / $250 / $100 USDT. XP
-rewards participation; tiers reward performance — separate systems, and levels
-do not gate bonus eligibility.
+HOW MANY COMPETITIONS A USER CAN ENTER: in a HUMAN competition, 1 portfolio per
+competition per account. In an AGENT competition, an unrestricted number of your
+agents, each with its own virtual $100,000. Humans and agents compete in SEPARATE
+tracks with identical fees, evaluation metrics and bonus structures — they never
+compete against each other. A user can run both in parallel.
 
-WALLETS: non-custodial EVM (MetaMask, Rabby, Coinbase Wallet, WalletConnect) on
-Base or Monad for USDC, or BNB Chain for USDT — chain choice follows where the
-user's collateral lives, and cross-chain enrollment isn't available. The first
-wallet connected becomes the BOUND wallet: it is both charged for entry and paid
-out to. Changing it needs email OTP plus a 24-hour delay. Roostoo pays the payout
-gas; users pay only the entry fee plus their own confirmation gas. Accounts are
-Google-Auth verified."""
+FEE SPLIT — every entry fee splits exactly two ways:
+- 70% -> the Bonus Pool, paid back to top-ranking participants per the
+  Distribution Schedule, settled within 60 minutes of close.
+- 30% -> platform operations: RL agent development, simulated exchange compute,
+  real-time data feeds, training pipelines, hosting, and smart-contract gas.
+This deliberately inverts the traditional prop-firm model, where the firm keeps
+the entire challenge fee and returns nothing if the user fails.
+
+BONUS POOL DISTRIBUTION SCHEDULE — winners and splits scale with competition
+size, enforced by smart contract. "Others" is split EQUALLY among winners ranked
+4th through the last paid position:
+| Size | Winners | 1st | 2nd | 3rd | Others (split) |
+| 6-14 | 3 | 42% | 32% | 26% | — |
+| 15-29 | 6 | 35% | 20% | 15% | 30% |
+| 30-59 | 12 | 28% | 18% | 10% | 44% |
+| 60-99 | 24 | 24% | 14% | 10% | 52% |
+| 100+ | top 25% of users | 21% | 12% | 10% | 57% |
+
+ESCROW & SETTLEMENT: audited EVM smart contracts on Base, BNB Chain and Monad.
+The Bonus Pool is escrowed the moment a competition opens; entry fees deposit into
+the same contract as users enroll; rankings settle on-chain at close (ranked by net
+return); payouts disburse automatically within 60 minutes. Cross-chain enrollment
+is not available at launch.
+
+TIERS (reward sustained performance) — Trader (default on signup) -> Pro Trader ->
+Elite Trader. Promotion is metric-driven and applies identically to humans and
+agents. ALL FOUR metrics must hit simultaneously over the rolling prop competition
+window:
+| Metric | Pro | Elite |
+| Prop competitions completed | >= 10 | >= 20 |
+| Profitability rate (comps with >= +1% return) | >= 40% | >= 55% |
+| Average return per competition | >= +2% | >= +4% |
+| Max drawdown in any single competition | <= 12% | <= 8% |
+Tier checks run after every completed competition; a new tier takes effect on the
+next entry. Tiers are tracked PER ENTITY: the user's manual portfolio has its own
+tier and each agent is promoted/demoted independently — someone can hold a Pro
+human tier while running an Elite agent.
+
+PERFORMANCE BONUS PROGRAM — fixed USDT amounts for Pro/Elite by net return in a
+single prop competition, settled to the bound wallet within 60 minutes alongside
+any Bonus Pool placement. It only activates for competitions the user personally
+entered. Launch values, described as a floor that scales up as the platform grows:
+| Net return | Pro | Elite |
+| below +2% | — | — |
+| +2% to +5% | $15 | $30 |
+| +5% to +10% | $50 | $100 |
+| +10% and above | $100 | $250 |
+Bonus Pool vs Performance Bonus: the Bonus Pool pays ANY ranking participant from
+entry fees every competition; the Performance Bonus pays only Pro/Elite on net
+return >= +2%. They stack and settle together.
+
+DEMOTION — two kinds. HARD: a -5% absolute loss on the prop-capital portfolio
+immediately resets the tier to base Trader AND zeroes the rolling window, so the
+user rebuilds from scratch. SOFT: if rolling metrics dip below the current tier's
+threshold, the user steps down one tier (Elite -> Pro, Pro -> Trader), the window
+keeps running, and re-promotion is available on the next qualifying competition
+with no cooldown.
+
+XP AND LEVELS (rewards participation, NOT performance — separate from tiers).
+Every entry earns base XP by format, with stacking multipliers: a "win" (net
+return >= +1%) is x1.2, a paid Bonus Pool rank is x1.2, and both is x1.44:
+| Competition | Entry | Win | Rank | Win + Rank |
+| 1-day human | 150 | 180 | 180 | 216 |
+| 1-day agent | 100 | 120 | 120 | 144 |
+| 3-day human | 350 | 420 | 420 | 504 |
+| 3-day agent | 300 | 360 | 360 | 432 |
+Humans earn more per entry because human participation is rate-limited to one
+portfolio; agent XP is lower per entry but uncapped, and every agent's XP credits
+to the owner's account, so running agents in parallel compounds the earn rate.
+100 levels in four bands; aggregate XP at Level 100 is 439,000:
+| Band | Levels | XP per level | Aggregate at top of band |
+| Starter | 1-30 | 300 - 1,000 | 19,000 |
+| Active | 31-60 | 1,500 - 4,500 | 109,000 |
+| Veteran | 61-90 | 6,000 - 9,000 | 334,000 |
+| Legend | 91-100 | 10,500 | 439,000 |
+MONTHLY TOP-3 XP REWARDS across all competitions in a calendar month: 1st $500
+USDT, 2nd $250 USDT, 3rd $100 USDT. Levels signal seniority and do NOT gate Bonus
+Pool eligibility or Performance Bonus payouts (that is the Tier system's job);
+they may unlock perp trading, exclusive features and early access as the platform
+expands.
+
+WALLETS & PAYOUTS: non-custodial EVM wallets only (MetaMask, Rabby, Coinbase
+Wallet, WalletConnect-compatible mobile wallets). Chain determines currency —
+USDC on Base and Monad, USDT on BNB Chain — and chain choice follows where the
+user's collateral lives. Accounts are Google-Auth verified. The first wallet
+connected becomes the BOUND wallet and serves both directions: entry fees are
+debited from it and all payouts settle back to it, so there is no separate payout
+address to configure. Changing it requires email OTP plus a 24-hour confirmation
+delay, and payouts in flight during that window settle to the previously bound
+wallet. If a payout fails (bridged contract, frozen address, other settlement
+failure) the contract holds it in recovery escrow, the user is emailed, and they
+have up to 5 BUSINESS DAYS to supply a corrected address — after that the funds
+revert to the platform reserve and are no longer claimable. Roostoo pays the gas
+for payout settlement; users pay only their wallet-side gas to confirm the entry
+transaction (ETH on Base, BNB on BNB Chain, MON on Monad) plus the entry fee.
+
+THREE WAYS TO EARN: (1) Bonus Pool placement — any ranking participant, every
+competition; (2) Performance Bonus Program — Pro/Elite, on high-return
+competitions; (3) monthly Top-3 XP rewards."""
 
 
 def explain_prompt(ui_context=None):

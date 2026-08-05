@@ -263,15 +263,61 @@ class TestPlatformFactGrounding(unittest.TestCase):
 
     def test_chains_mapped_to_correct_currency(self):
         # USDC on Base + Monad, USDT on BNB Chain — getting this backwards would
-        # send a user to the wrong chain with the wrong stablecoin.
-        self.assertRegex(self.brief, r"Base or Monad for USDC")
-        self.assertRegex(self.brief, r"BNB Chain for USDT")
+        # send a user to the wrong chain with the wrong stablecoin. Assert the
+        # mapping semantically so rewording the sentence can't silently drop it.
+        self.assertRegex(self.brief, r"USDC on Base and Monad")
+        self.assertRegex(self.brief, r"USDT on BNB Chain")
+        # and the inverted forms must never appear
+        for wrong in ("USDT on Base", "USDC on BNB", "USDT on Monad"):
+            self.assertNotIn(wrong, self.brief, wrong)
 
     def test_no_stale_or_invented_platform_claims(self):
         low = self.brief.lower()
         for wrong in ("30 seconds", "a week", "weekly competition", "7-day",
                       "14-day", "custodial wallet", "we hold"):
             self.assertNotIn(wrong, low, wrong)
+
+    def test_distribution_schedule_table_present(self):
+        # The chatbot must answer "40 people entered, who gets paid?" without RAG.
+        for row in ("6-14", "15-29", "30-59", "60-99", "100+"):
+            self.assertIn(row, self.brief, row)
+        for pct in ("42%", "32%", "26%", "35%", "28%", "24%", "21%", "57%"):
+            self.assertIn(pct, self.brief, pct)
+
+    def test_performance_bonus_amounts_present(self):
+        for amt in ("$15", "$30", "$50", "$100", "$250"):
+            self.assertIn(amt, self.brief, amt)
+
+    def test_xp_tables_present(self):
+        for n in ("150", "180", "216", "100", "144", "350", "420", "504",
+                  "300", "360", "432", "439,000", "19,000", "109,000", "334,000"):
+            self.assertIn(n, self.brief, n)
+        for band in ("Starter", "Active", "Veteran", "Legend"):
+            self.assertIn(band, self.brief, band)
+        for mult in ("x1.2", "x1.44"):
+            self.assertIn(mult, self.brief, mult)
+
+    def test_no_fixed_schedule_is_invented(self):
+        # There is no published calendar; the prompt must say so rather than let
+        # the model guess start times (it did exactly that before this guard).
+        self.assertIn("NO published fixed calendar", self.brief)
+        self.assertIn("~24 hours", self.brief)
+
+    def test_does_not_tell_model_to_use_tools_it_lacks(self):
+        # The Q&A paths run WITHOUT tools, so referencing `retrieve` made the
+        # model answer "I would need to retrieve the platform cards" instead of
+        # answering. The brief must not point at tooling.
+        self.assertNotIn("use `retrieve`", self.brief)
+        self.assertIn("no tool names", self.brief)
+
+    def test_facts_reach_every_qa_surface(self):
+        # Neither Q&A path passes tools, so the facts must be inline in BOTH
+        # prompts, not only retrievable from cards.
+        from coach_compiler.prompt import explain_prompt, create_mode_prompt
+        for name, text in (("explain", explain_prompt()),
+                           ("create", create_mode_prompt())):
+            for fact in ("42%", "$250", "439,000", "5 BUSINESS DAYS", "$100,000"):
+                self.assertIn(fact, text, "%s prompt missing %s" % (name, fact))
 
     def test_cards_do_not_contradict_the_brief(self):
         # The old combined card duplicated these facts and drifted; it's gone.
