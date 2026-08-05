@@ -104,7 +104,8 @@ MODE_SELECT = """MODE SELECTION (decide this first, on every user message)
 ENVELOPE = """OPERATING ENVELOPE (hard facts, never contradict)
 - The agent decides every 1, 5, or 15 minutes — nothing faster than 1 minute.
   No seconds/sub-minute scalping, no HFT.
-- Competitions run a few hours to about a week; agents are forced flat at the end.
+- Competitions come in exactly two windows: 1-day (24h) and 3-day (72h). Nothing
+  longer exists, so an agent's holding horizon can never exceed 3 days.
 - LONG-ONLY: agents buy / hold / go flat — no shorting yet. Never ask "long or
   short?" and never offer shorting; if asked, say it isn't available yet.
 - The ONLY things that can be set for an agent (nothing else exists):

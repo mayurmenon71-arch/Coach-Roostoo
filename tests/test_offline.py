@@ -277,6 +277,22 @@ class TestPlatformFactGrounding(unittest.TestCase):
                       "14-day", "custodial wallet", "we hold"):
             self.assertNotIn(wrong, low, wrong)
 
+    def test_whole_prompt_is_self_consistent_on_duration(self):
+        # ENVELOPE once claimed competitions run "a few hours to about a week"
+        # while PLATFORM_BRIEF said 1-day/3-day — both in the same prompt, so the
+        # model could pick either. Guard every assembled prompt, not just the brief.
+        from coach_compiler.prompt import (ENVELOPE, explain_prompt,
+                                           create_mode_prompt)
+        import server as _srv
+        for name, text in (("ENVELOPE", ENVELOPE),
+                           ("explain", explain_prompt()),
+                           ("create", create_mode_prompt()),
+                           ("api/coach", _srv.SYSTEM_PROMPT)):
+            low = text.lower()
+            for wrong in ("about a week", "few hours to", "week-long",
+                          "weekly competition"):
+                self.assertNotIn(wrong, low, "%s: %s" % (name, wrong))
+
     def test_distribution_schedule_table_present(self):
         # The chatbot must answer "40 people entered, who gets paid?" without RAG.
         for row in ("6-14", "15-29", "30-59", "60-99", "100+"):
