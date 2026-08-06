@@ -332,6 +332,62 @@ async def health():
 
 
 # ============================================================================
+# VOICE INPUT — POST /api/transcribe (Groq Whisper, OpenAI-compatible)
+# ============================================================================
+# The browser records a short clip (MediaRecorder) and POSTs the raw bytes here
+# with the audio Content-Type. We forward it to Groq's audio/transcriptions
+# endpoint and return { text }. The frontend then feeds that text through the
+# normal chat path — so voice is just another way to produce a message; nothing
+# downstream (prompt, guardrail, model) changes.
+STT_URL   = os.environ.get("TRANSCRIBE_URL",
+                           "https://api.groq.com/openai/v1/audio/transcriptions")
+STT_MODEL = os.environ.get("STT_MODEL", "whisper-large-v3")
+MAX_AUDIO_BYTES = 25 * 1024 * 1024   # Groq's per-file limit
+
+# Map an incoming audio Content-Type to a filename extension Groq accepts.
+_AUDIO_EXT = [("webm", "webm"), ("ogg", "ogg"), ("mp4", "mp4"), ("m4a", "m4a"),
+              ("mpeg", "mp3"), ("mp3", "mp3"), ("wav", "wav"), ("flac", "flac")]
+
+
+@app.post("/api/transcribe")
+async def transcribe(request: Request):
+    # Same optional shared-secret gate as /api/coach (no-op unless the secret is set).
+    if INTERNAL_TOKEN and request.headers.get("X-Internal-Token", "") != INTERNAL_TOKEN:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not KEY:
+        return JSONResponse({"error": "Server has no API key configured."}, status_code=500)
+
+    audio = await request.body()
+    if not audio:
+        return JSONResponse({"error": "empty audio"}, status_code=400)
+    if len(audio) > MAX_AUDIO_BYTES:
+        return JSONResponse({"error": "audio too large (max 25 MB)"}, status_code=413)
+
+    ctype = (request.headers.get("content-type") or "audio/webm").split(";")[0].strip()
+    ext = next((e for key, e in _AUDIO_EXT if key in ctype), "webm")
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            upstream = await client.post(
+                STT_URL,
+                headers={"Authorization": f"Bearer {KEY}"},
+                files={"file": ("audio.%s" % ext, audio, ctype or "audio/webm")},
+                data={"model": STT_MODEL, "response_format": "json"},
+            )
+        if upstream.status_code != 200:
+            print("[transcribe] provider error:", upstream.status_code, upstream.text[:300])
+            rate = upstream.status_code == 429 or "rate limit" in upstream.text.lower()
+            msg = ("Transcription is briefly rate-limited — try again in a few seconds."
+                   if rate else "Couldn't transcribe the audio right now.")
+            return JSONResponse({"error": msg}, status_code=502)
+        data = upstream.json()
+        return JSONResponse({"text": (data.get("text") or "").strip()})
+    except Exception as err:  # noqa: BLE001
+        print("[transcribe] error:", str(err))
+        return JSONResponse({"error": "internal server error"}, status_code=500)
+
+
+# ============================================================================
 # INTENT COMPILER — "Rules to Rewards" Create mode (coach_compiler package)
 # ============================================================================
 # POST /api/compile { messages: [{role, content}, ...] }
