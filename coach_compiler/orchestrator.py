@@ -42,6 +42,15 @@ _QSTART_RE = re.compile(
     r"describe|tell me|help me understand|difference between|compare)\b", re.I)
 
 
+def _latest_user_message(messages):
+    """The most recent user turn's text — used to attach only the relevant
+    platform-fact sections to the system prompt (see prompt.platform_facts_for)."""
+    for m in reversed(messages or []):
+        if m.get("role") == "user" and m.get("content"):
+            return m["content"]
+    return ""
+
+
 def is_question(text):
     """Conservative: only treat clearly-interrogative, non-build text as a
     question. Build verbs / strategy descriptions are never questions, so the
@@ -179,7 +188,8 @@ def run_create(messages, llm=None, ui_context=None):
     if llm is None:
         from .llm_client import call_chat as llm
 
-    convo = [{"role": "system", "content": create_mode_prompt(ui_context)}]
+    latest = _latest_user_message(messages)
+    convo = [{"role": "system", "content": create_mode_prompt(ui_context, latest)}]
     convo.extend({"role": m["role"], "content": m["content"]}
                  for m in messages
                  if m.get("role") in ("user", "assistant") and m.get("content"))
@@ -307,7 +317,8 @@ def run_explain(messages, llm=None, ui_context=None):
     build path, so questions stay cheap. Returns {"type": "chat", "text": ...}."""
     if llm is None:
         from .llm_client import call_chat as llm
-    convo = [{"role": "system", "content": explain_prompt(ui_context)}]
+    latest = _latest_user_message(messages)
+    convo = [{"role": "system", "content": explain_prompt(ui_context, latest)}]
     # A short tail is enough context for follow-up questions; keeping it small
     # is the whole point of this path.
     tail = [{"role": m["role"], "content": m["content"]}

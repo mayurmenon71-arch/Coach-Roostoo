@@ -52,10 +52,16 @@ if not KEY:
 # chat surface and the intent compiler describe the SAME product (same signal
 # families, strategy variants, indicators, and knobs) — one source of truth.
 from coach_compiler.prompt import registry_brief as _registry_brief  # noqa: E402
-from coach_compiler.prompt import PLATFORM_BRIEF as _PLATFORM_BRIEF  # noqa: E402
+from coach_compiler.prompt import PLATFORM_RULES as _PLATFORM_RULES  # noqa: E402
+from coach_compiler.prompt import platform_facts_for as _platform_facts_for  # noqa: E402
 from coach_compiler.prompt import FORMATTING as _FORMATTING  # noqa: E402
 
-SYSTEM_PROMPT = (
+# Header + closing (tool discipline) wrap the per-request body. The heavy
+# platform-fact tables are NOT baked in here — they're attached per request by
+# build_system_prompt() based on what the user actually asked, so a greeting or
+# a build request doesn't carry ~2.9k tokens of competition/fee/XP tables it
+# will never use (that was tripping the provider's free-tier per-minute cap).
+_SYS_HEADER = (
     "You are Coach Roostoo, an expert trading educator inside the Roostoo "
     "platform. You help users understand trading concepts, the agents, "
     "signal families and strategy variants, risk, and how to use the Roostoo "
@@ -63,14 +69,31 @@ SYSTEM_PROMPT = (
     "Keep answers clear, concise, and educational, always grounded in the "
     "Roostoo context. When a user asks how to create an agent, walk them "
     "through the Mint Agent wizard (My Agents -> Mint Agent) using the exact "
-    "facts below — never invent parameters the wizard doesn't have.\n\n"
-    + _registry_brief() + "\n\n" + _PLATFORM_BRIEF + "\n\n" + _FORMATTING + "\n\n"
+    "facts below — never invent parameters the wizard doesn't have."
+)
+_SYS_TOOLS = (
     "You have access to tools that let you act on the platform on the user's behalf. "
     "IMPORTANT: before calling any action tool (create_trading_agent, join_competition), "
     "you MUST first describe exactly what you are about to do and ask the user to confirm. "
     "Only call a tool after the user explicitly agrees (e.g. 'yes', 'go ahead', 'do it'). "
     "For read-only tools (get_my_portfolio) you may call them immediately without asking."
 )
+
+
+def build_system_prompt(message=""):
+    """Assemble the /api/coach system prompt for one turn. registry_brief (the
+    agent registry) and the short PLATFORM_RULES are always present; the bulky
+    platform-fact sections are attached only when `message` is about them."""
+    parts = [_SYS_HEADER, _registry_brief(), _PLATFORM_RULES]
+    facts = _platform_facts_for(message)
+    if facts:
+        parts.append(facts)
+    parts += [_FORMATTING, _SYS_TOOLS]
+    return "\n\n".join(parts)
+
+
+# Back-compat: a lean default build (no message -> no fact tables).
+SYSTEM_PROMPT = build_system_prompt("")
 
 app = FastAPI()
 
@@ -154,7 +177,9 @@ async def coach(request: Request):
         # client `system` (e.g. runtime config context) is layered on top, and an
         # optional `history` array carries prior turns for multi-turn memory.
         mode = "text"
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Attach only the platform facts this message is about (keeps the
+        # common case well under the provider's per-minute token cap).
+        messages = [{"role": "system", "content": build_system_prompt(frontend_message)}]
         if body.get("system"):
             messages.append({"role": "system", "content": body["system"]})
         for m in (body.get("history") or [])[-12:]:
@@ -169,7 +194,9 @@ async def coach(request: Request):
         #   user / assistant (text) — standard
         #   assistant (tool_call)   — ToolCallId + ToolName set, no content
         #   tool                    — ToolCallId + ToolName set, content = result
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        _last_user = next((m.get("Content") or "" for m in reversed(go_messages)
+                           if (m.get("Role") or "").lower() == "user"), "")
+        messages = [{"role": "system", "content": build_system_prompt(_last_user)}]
         for m in go_messages:
             role = (m.get("Role") or "").lower()
             if not role:

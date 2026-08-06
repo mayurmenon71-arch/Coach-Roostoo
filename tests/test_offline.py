@@ -326,14 +326,58 @@ class TestPlatformFactGrounding(unittest.TestCase):
         self.assertNotIn("use `retrieve`", self.brief)
         self.assertIn("no tool names", self.brief)
 
-    def test_facts_reach_every_qa_surface(self):
-        # Neither Q&A path passes tools, so the facts must be inline in BOTH
-        # prompts, not only retrievable from cards.
+    def test_facts_reach_every_qa_surface_when_asked(self):
+        # Neither Q&A path passes tools, so the relevant facts must be inline in
+        # the prompt for the topic being asked (routed by platform_facts_for).
         from coach_compiler.prompt import explain_prompt, create_mode_prompt
-        for name, text in (("explain", explain_prompt()),
-                           ("create", create_mode_prompt())):
-            for fact in ("42%", "$250", "439,000", "5 BUSINESS DAYS", "$100,000"):
-                self.assertIn(fact, text, "%s prompt missing %s" % (name, fact))
+        cases = [
+            ("how is the bonus pool split for 40 people?", "42%"),
+            ("what does an Elite trader get paid?", "$250"),
+            ("how many XP to reach the top level?", "439,000"),
+            ("what happens if my payout wallet fails?", "5 BUSINESS DAYS"),
+            ("is this real money or a virtual balance?", "$100,000"),
+        ]
+        for msg, fact in cases:
+            for name, fn in (("explain", explain_prompt), ("create", create_mode_prompt)):
+                self.assertIn(fact, fn(message=msg),
+                              "%s prompt missing %s for %r" % (name, fact, msg))
+
+
+# ── Conditional fact injection (the fix for free-tier rate limiting) ────────
+class TestPlatformFactRouting(unittest.TestCase):
+    def _facts(self, msg):
+        from coach_compiler.prompt import platform_facts_for
+        return platform_facts_for(msg)
+
+    def test_greeting_and_build_carry_no_fact_tables(self):
+        for msg in ("hi", "hello", "build me a momentum agent on BTC",
+                    "give me a dip buyer", "what is Sharpe reward?"):
+            self.assertEqual(self._facts(msg), "", msg)
+
+    def test_topic_questions_pull_only_their_section(self):
+        self.assertIn("42%", self._facts("how much is the entry fee?"))
+        self.assertNotIn("Legend", self._facts("how much is the entry fee?"))  # not XP
+        self.assertIn("Elite", self._facts("how do I get promoted to Elite?"))
+        self.assertIn("439,000", self._facts("how does XP work?"))
+        self.assertIn("5 BUSINESS DAYS", self._facts("how do payouts hit my wallet?"))
+
+    def test_greeting_prompt_is_far_smaller_than_fact_question(self):
+        # The whole point: a greeting must not carry the ~2.9k-token brief.
+        from coach_compiler.prompt import explain_prompt
+        lean = explain_prompt(message="hi")
+        heavy = explain_prompt(message="explain the bonus pool distribution schedule")
+        self.assertLess(len(lean), len(heavy))
+        self.assertLess(len(lean), len(heavy) - 1500)  # a substantial gap
+
+    def test_server_prompt_lean_by_default_but_grounded_on_topic(self):
+        import server as _srv
+        greeting = _srv.build_system_prompt("hi")
+        feeq = _srv.build_system_prompt("how much does a competition cost?")
+        self.assertNotIn("42%", greeting)          # no distribution table on a greeting
+        self.assertIn("$5", feeq)                  # fee facts present when asked
+        self.assertLess(len(greeting), len(feeq))
+        # anti-hallucination rule is always on, even without fact tables
+        self.assertIn("never", greeting.lower())
 
     def test_cards_do_not_contradict_the_brief(self):
         # The old combined card duplicated these facts and drifted; it's gone.

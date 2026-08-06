@@ -265,17 +265,22 @@ premise if a user assumes otherwise. If the user wants to BUILD an agent
 (describes a trader they want), tell them to just say so — e.g. "build me an
 agent that buys dips" — and you'll create it."""
 
-PLATFORM_BRIEF = """ROOSTOO PLATFORM FACTS — grounded in https://roostoo.com/docs.
-These are the complete, authoritative platform facts. Answer platform questions
-DIRECTLY and specifically from them, including the tables. Rules:
-- Never invent a number, threshold, fee, date, schedule, or feature. If a figure
-  is not below, say plainly that you don't have it and point to
-  https://roostoo.com/docs — do not estimate or "typically" your way to a number.
-- Never mention internal machinery in your answer: no tool names (e.g. retrieve),
-  no card names, no "let me check". You already have these facts — just answer.
-- Quote exact figures when the user asks for them; don't round or hedge.
+# ── Platform facts, split into topical sections ─────────────────────────────
+# The full brief is ~2.9k tokens. Injecting all of it on every request blew the
+# provider's free-tier per-minute token budget (a greeting cost as much as a
+# fee question). So the facts are partitioned here and `platform_facts_for(msg)`
+# attaches ONLY the sections a message is actually about. PLATFORM_RULES is
+# short and always-on, so even an un-matched platform question won't be answered
+# with an invented number.
+PLATFORM_RULES = """ROOSTOO PLATFORM ANSWERS — grounding rules (always apply)
+- For platform facts (fees, competitions, XP, tiers, wallets, payouts): state
+  only figures you have been given. If a specific number isn't in your context,
+  say plainly you don't have it and point to https://roostoo.com/docs — never
+  estimate, round, or "typically" your way to a number.
+- Never mention internal machinery: no tool names, no card names, no "let me
+  check". If you have the fact, just answer; if you don't, say so."""
 
-WHAT ROOSTOO IS: a gamified RL agent research lab AND an on-chain prop trading
+_PLAT_INTRO = """WHAT ROOSTOO IS: a gamified RL agent research lab AND an on-chain prop trading
 arena where AI agents and human traders compete in time-bounded competitions for
 bonus rewards, with prop capital allocation for elite performers. Four layers:
 (1) Agent Factory — no-code RL agent building; (2) simulated exchange — real-time
@@ -292,7 +297,11 @@ CRITICAL, NEVER GET THIS WRONG — what is real vs. simulated:
   simulated trading". Never tell a user the platform trades their own real money,
   and never call the competitions fake/play-money either — fees and payouts are real.
 
-COMPETITION FORMATS — exactly two. No other window or fee tier exists (longer
+THREE WAYS TO EARN: (1) Bonus Pool placement — any ranking participant, every
+competition; (2) Performance Bonus Program — Pro/Elite, on high-return
+competitions; (3) monthly Top-3 XP rewards."""
+
+_PLAT_COMPETITIONS = """COMPETITION FORMATS — exactly two. No other window or fee tier exists (longer
 windows and higher tiers are deferred):
 | Window | Entry fee | Active trading window | Open to |
 | 1-day | $5 USDC or USDT | 24 hours | agents and humans |
@@ -336,9 +345,9 @@ ESCROW & SETTLEMENT: audited EVM smart contracts on Base, BNB Chain and Monad.
 The Bonus Pool is escrowed the moment a competition opens; entry fees deposit into
 the same contract as users enroll; rankings settle on-chain at close (ranked by net
 return); payouts disburse automatically within 60 minutes. Cross-chain enrollment
-is not available at launch.
+is not available at launch."""
 
-TIERS (reward sustained performance) — Trader (default on signup) -> Pro Trader ->
+_PLAT_TIERS = """TIERS (reward sustained performance) — Trader (default on signup) -> Pro Trader ->
 Elite Trader. Promotion is metric-driven and applies identically to humans and
 agents. ALL FOUR metrics must hit simultaneously over the rolling prop competition
 window:
@@ -370,9 +379,9 @@ immediately resets the tier to base Trader AND zeroes the rolling window, so the
 user rebuilds from scratch. SOFT: if rolling metrics dip below the current tier's
 threshold, the user steps down one tier (Elite -> Pro, Pro -> Trader), the window
 keeps running, and re-promotion is available on the next qualifying competition
-with no cooldown.
+with no cooldown."""
 
-XP AND LEVELS (rewards participation, NOT performance — separate from tiers).
+_PLAT_XP = """XP AND LEVELS (rewards participation, NOT performance — separate from tiers).
 Every entry earns base XP by format, with stacking multipliers: a "win" (net
 return >= +1%) is x1.2, a paid Bonus Pool rank is x1.2, and both is x1.44:
 | Competition | Entry | Win | Rank | Win + Rank |
@@ -393,9 +402,9 @@ MONTHLY TOP-3 XP REWARDS across all competitions in a calendar month: 1st $500
 USDT, 2nd $250 USDT, 3rd $100 USDT. Levels signal seniority and do NOT gate Bonus
 Pool eligibility or Performance Bonus payouts (that is the Tier system's job);
 they may unlock perp trading, exclusive features and early access as the platform
-expands.
+expands."""
 
-WALLETS & PAYOUTS: non-custodial EVM wallets only (MetaMask, Rabby, Coinbase
+_PLAT_WALLETS = """WALLETS & PAYOUTS: non-custodial EVM wallets only (MetaMask, Rabby, Coinbase
 Wallet, WalletConnect-compatible mobile wallets). Chain determines currency —
 USDC on Base and Monad, USDT on BNB Chain — and chain choice follows where the
 user's collateral lives. Accounts are Google-Auth verified. The first wallet
@@ -408,32 +417,88 @@ failure) the contract holds it in recovery escrow, the user is emailed, and they
 have up to 5 BUSINESS DAYS to supply a corrected address — after that the funds
 revert to the platform reserve and are no longer claimable. Roostoo pays the gas
 for payout settlement; users pay only their wallet-side gas to confirm the entry
-transaction (ETH on Base, BNB on BNB Chain, MON on Monad) plus the entry fee.
+transaction (ETH on Base, BNB on BNB Chain, MON on Monad) plus the entry fee."""
 
-THREE WAYS TO EARN: (1) Bonus Pool placement — any ranking participant, every
-competition; (2) Performance Bonus Program — Pro/Elite, on high-return
-competitions; (3) monthly Top-3 XP rewards."""
+# Ordered so a multi-topic question keeps a sensible reading order.
+PLATFORM_SECTIONS = [
+    ("intro", _PLAT_INTRO),
+    ("competitions", _PLAT_COMPETITIONS),
+    ("tiers", _PLAT_TIERS),
+    ("xp", _PLAT_XP),
+    ("wallets", _PLAT_WALLETS),
+]
+
+# Keyword triggers per section (substring match on the lowercased user message).
+_PLAT_KEYWORDS = {
+    "intro": ("what is roostoo", "what's roostoo", "whats roostoo", "about roostoo",
+              "real money", "real cash", "simulated", "virtual", "paper trad",
+              "prop", "custody", "custodial", "how do i earn", "how to earn",
+              "make money", "ways to earn", "is it real", "four layer", "4 layer",
+              "agent factory", "what does roostoo"),
+    "competitions": ("competition", "compete", "contest", "tournament", "fee",
+                     "entry", "cost", "how much", "price", "$5", "$20", "1-day",
+                     "3-day", "one day", "three day", "window", "duration",
+                     "how long", "format", "schedule", "when", "join", "enter",
+                     "enroll", "participant", "minimum", "prize", "pool", "bonus pool",
+                     "distribution", "winner", "split", "rank", "leaderboard",
+                     "escrow", "settle", "payout"),
+    "tiers": ("tier", "trader", "pro ", "pro trader", "elite", "promot", "demot",
+              "performance bonus", "drawdown", "prop capital", "allocation",
+              "qualify", "rank up", "level up", "graduat"),
+    "xp": ("xp", "experience point", " level", "levels", "points", "band",
+           "starter", "veteran", "legend", "monthly", "streak", "leveling"),
+    "wallets": ("wallet", "chain", "base ", "bnb", "monad", "metamask", "rabby",
+                "coinbase", "walletconnect", "payout", "gas", "kyc", "usdc",
+                "usdt", "address", "bound", "otp", "withdraw", "deposit", "connect"),
+}
+
+# Full brief (rules + every section) — used where all facts are wanted at once
+# (e.g. drift-guard tests, or a caller that doesn't route by message).
+PLATFORM_BRIEF = PLATFORM_RULES + "\n\n" + "\n\n".join(v for _, v in PLATFORM_SECTIONS)
 
 
-def explain_prompt(ui_context=None):
-    """Lean system prompt for the tool-less Explain (Q&A) path."""
-    parts = [EXPLAIN_ROLE, registry_brief(), ENVELOPE, PLATFORM_BRIEF,
-             BACKTESTING, NUMBERS, FORMATTING, TONE]
+def platform_facts_for(message):
+    """Return only the fact sections a message is actually about, in reading
+    order — or "" if it's not a platform question (a greeting, a build request,
+    a strategy question). Keeps the common case lean; PLATFORM_RULES stays in
+    the base prompt so an un-matched platform question still won't be answered
+    with an invented number."""
+    t = (message or "").lower()
+    out = [v for k, v in PLATFORM_SECTIONS if any(w in t for w in _PLAT_KEYWORDS[k])]
+    return "\n\n".join(out)
+
+
+
+def explain_prompt(ui_context=None, message=None):
+    """Lean system prompt for the tool-less Explain (Q&A) path. Only the platform
+    fact sections the latest user `message` is about are attached (via
+    platform_facts_for), so a greeting or a concept question stays lean instead
+    of carrying the full ~2.9k-token brief."""
+    facts = platform_facts_for(message)
+    parts = [EXPLAIN_ROLE, registry_brief(), ENVELOPE, PLATFORM_RULES]
+    if facts:
+        parts.append(facts)
+    parts += [BACKTESTING, NUMBERS, FORMATTING, TONE]
     if ui_context:
         parts.append("CURRENT CONFIG (reference for 'my agent' "
                      "questions):\n" + str(ui_context).strip())
     return "\n\n".join(parts)
 
 
-def create_mode_prompt(ui_context=None):
+def create_mode_prompt(ui_context=None, message=None):
     """Assemble the unified Coach system prompt (Explain + Create).
 
     ui_context: optional plain-text snapshot of the user's current
     configuration, injected so answers about "my agent" are grounded in real
     values rather than guessed.
+    message: the latest user message; only the platform fact sections it is
+    about are attached, keeping build/greeting turns lean.
     """
-    parts = [ROLE, MODE_SELECT, registry_brief(), ENVELOPE, PLATFORM_BRIEF,
-             WORKFLOW, BACKTESTING, CONTEXT_POLICY, NUMBERS, FORMATTING, TONE]
+    facts = platform_facts_for(message)
+    parts = [ROLE, MODE_SELECT, registry_brief(), ENVELOPE, PLATFORM_RULES]
+    if facts:
+        parts.append(facts)
+    parts += [WORKFLOW, BACKTESTING, CONTEXT_POLICY, NUMBERS, FORMATTING, TONE]
     if ui_context:
         parts.append("CURRENT CONFIG (the user's live on-screen "
                      "settings — reference these for 'my agent' questions):\n"
