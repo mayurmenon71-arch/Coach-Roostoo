@@ -41,7 +41,11 @@ KEY            = os.environ.get("API_KEY")
 INTERNAL_TOKEN = os.environ.get("COACH_SERVICE_SECRET", "")
 # Groq's OpenAI-compatible chat-completions endpoint.
 API_URL        = os.environ.get("API_URL", "https://api.groq.com/openai/v1/chat/completions")
-MODEL          = os.environ.get("MODEL", "llama-3.3-70b-versatile")
+# TEMP (2026-08-10): default to the 8B model — it has a much larger free-tier
+# daily budget (RPD 14.4K / TPD 500K vs 70B's 1K / 100K), so testing isn't
+# blocked by the daily cap. Revert to "llama-3.3-70b-versatile" for best quality
+# once on a paid Groq tier. (A MODEL env var, if set in Vercel, still overrides.)
+MODEL          = os.environ.get("MODEL", "llama-3.1-8b-instant")
 
 if not KEY:
     print("\n[Coach Roostoo] No API key set yet.")
