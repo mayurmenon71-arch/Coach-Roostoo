@@ -55,6 +55,15 @@ from coach_compiler.prompt import registry_brief as _registry_brief  # noqa: E40
 from coach_compiler.prompt import PLATFORM_RULES as _PLATFORM_RULES  # noqa: E402
 from coach_compiler.prompt import platform_facts_for as _platform_facts_for  # noqa: E402
 from coach_compiler.prompt import FORMATTING as _FORMATTING  # noqa: E402
+# The behavioral policy the chat was previously missing — it lived only in the
+# compiler's create/explain prompts, so the browser chat leaked internal codes,
+# skipped the honest-backtest framing, and had no envelope/refusal discipline.
+# Import the same sections here so the chat and the compiler behave identically.
+from coach_compiler.prompt import ENVELOPE as _ENVELOPE  # noqa: E402
+from coach_compiler.prompt import BACKTESTING as _BACKTESTING  # noqa: E402
+from coach_compiler.prompt import CONTEXT_POLICY as _CONTEXT_POLICY  # noqa: E402
+from coach_compiler.prompt import NUMBERS as _NUMBERS  # noqa: E402
+from coach_compiler.prompt import TONE as _TONE  # noqa: E402
 
 # Header + closing (tool discipline) wrap the per-request body. The heavy
 # platform-fact tables are NOT baked in here — they're attached per request by
@@ -71,6 +80,8 @@ _SYS_HEADER = (
     "through the Mint Agent wizard (My Agents -> Mint Agent) using the exact "
     "facts below — never invent parameters the wizard doesn't have."
 )
+# Tool discipline — used ONLY on the Go tool-calling path, where action tools
+# (create_trading_agent, join_competition) are actually attached to the request.
 _SYS_TOOLS = (
     "You have access to tools that let you act on the platform on the user's behalf. "
     "IMPORTANT: before calling any action tool (create_trading_agent, join_competition), "
@@ -78,17 +89,32 @@ _SYS_TOOLS = (
     "Only call a tool after the user explicitly agrees (e.g. 'yes', 'go ahead', 'do it'). "
     "For read-only tools (get_my_portfolio) you may call them immediately without asking."
 )
+# The browser chat has NO tools wired. Say so plainly so the model never claims
+# it is creating an agent or acting on the user's behalf — it advises, and sends
+# the user to the Mint Agent wizard to actually build.
+_SYS_NO_ACTIONS = (
+    "You are a conversational coach only. You CANNOT place trades, create or launch "
+    "agents, join competitions, or change anything on the user's account from this "
+    "chat, and you have no tools here. Never say you are creating an agent, doing it "
+    "'on their behalf', or ask them to confirm an action you cannot perform. When a "
+    "user wants to build an agent, help them decide by explaining the choices, then "
+    "tell them to open the Mint Agent wizard (My Agents -> Mint Agent) to build it there."
+)
 
 
-def build_system_prompt(message=""):
-    """Assemble the /api/coach system prompt for one turn. registry_brief (the
-    agent registry) and the short PLATFORM_RULES are always present; the bulky
-    platform-fact sections are attached only when `message` is about them."""
-    parts = [_SYS_HEADER, _registry_brief(), _PLATFORM_RULES]
+def build_system_prompt(message="", with_tools=False):
+    """Assemble the /api/coach system prompt for one turn. The agent registry and
+    the short PLATFORM_RULES are always present; the bulky platform-fact sections
+    are attached only when `message` is about them. The behavioral policy
+    (envelope, honest-backtest, numbers, tone/refusals) mirrors the compiler so
+    both surfaces behave the same. `with_tools` selects the tool discipline (Go
+    tool-calling path) vs the no-actions clause (browser chat, no tools)."""
+    parts = [_SYS_HEADER, _registry_brief(), _ENVELOPE, _PLATFORM_RULES]
     facts = _platform_facts_for(message)
     if facts:
         parts.append(facts)
-    parts += [_FORMATTING, _SYS_TOOLS]
+    parts += [_BACKTESTING, _CONTEXT_POLICY, _NUMBERS, _FORMATTING, _TONE]
+    parts.append(_SYS_TOOLS if with_tools else _SYS_NO_ACTIONS)
     return "\n\n".join(parts)
 
 
@@ -196,7 +222,7 @@ async def coach(request: Request):
         #   tool                    — ToolCallId + ToolName set, content = result
         _last_user = next((m.get("Content") or "" for m in reversed(go_messages)
                            if (m.get("Role") or "").lower() == "user"), "")
-        messages = [{"role": "system", "content": build_system_prompt(_last_user)}]
+        messages = [{"role": "system", "content": build_system_prompt(_last_user, with_tools=True)}]
         for m in go_messages:
             role = (m.get("Role") or "").lower()
             if not role:
