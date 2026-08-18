@@ -106,6 +106,21 @@ _SYS_NO_ACTIONS = (
 )
 
 
+def _rag_facts(message):
+    """Fetch platform facts via RAG (rag.retrieve). Returns "" if RAG is
+    unavailable — deps not installed or index not built (e.g. on the current
+    Vercel serverless deploy) — so build_system_prompt() falls back to the
+    hard-coded _platform_facts_for() and nothing breaks."""
+    if not message:
+        return ""
+    try:
+        import rag
+        chunks = rag.retrieve(message, k=3)
+        return ("=== ROOSTOO FACTS ===\n" + chunks) if chunks else ""
+    except Exception:
+        return ""
+
+
 def build_system_prompt(message="", with_tools=False):
     """Assemble the /api/coach system prompt for one turn. The agent registry and
     the short PLATFORM_RULES are always present; the bulky platform-fact sections
@@ -114,7 +129,9 @@ def build_system_prompt(message="", with_tools=False):
     both surfaces behave the same. `with_tools` selects the tool discipline (Go
     tool-calling path) vs the no-actions clause (browser chat, no tools)."""
     parts = [_SYS_HEADER, _registry_brief(), _ENVELOPE, _PLATFORM_RULES]
-    facts = _platform_facts_for(message)
+    # RAG first (facts retrieved from the cards); if RAG is unavailable, fall
+    # back to the hard-coded platform-fact tables so behaviour never regresses.
+    facts = _rag_facts(message) or _platform_facts_for(message)
     if facts:
         parts.append(facts)
     parts += [_BACKTESTING, _CONTEXT_POLICY, _NUMBERS, _FORMATTING, _TONE]

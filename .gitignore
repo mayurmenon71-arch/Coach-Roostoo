@@ -14,3 +14,6 @@ venv/
 
 # Local tooling
 .claude/
+
+# RAG — the vector index is a build artifact, rebuilt from the cards
+chroma_db/

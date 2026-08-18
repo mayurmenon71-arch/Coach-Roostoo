@@ -3,10 +3,13 @@ services:
     name: coach-roostoo
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    # install both dependency files, then build the RAG index from the cards
+    buildCommand: pip install -r requirements.txt -r requirements-rag.txt && python rag.py
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: API_KEY
         sync: false   # paste your model API key in the Render dashboard
+      - key: MODEL
+        value: openai/gpt-oss-120b   # Groq model (llama-3.1-8b-instant was retired)
       - key: COACH_SERVICE_SECRET
         sync: false   # must match COACH_SERVICE_SECRET in roostoo-power-api

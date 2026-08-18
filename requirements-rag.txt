@@ -1,0 +1,8 @@
+# RAG dependencies — kept separate from requirements.txt so the current
+# Vercel (serverless) deploy is NOT affected. These are heavy (they pull in
+# PyTorch) and only belong in the container deploy (App Runner) later.
+#
+# Local testing:   python -m pip install -r requirements-rag.txt
+# When you move to a container, merge these two lines into requirements.txt.
+chromadb
+sentence-transformers
