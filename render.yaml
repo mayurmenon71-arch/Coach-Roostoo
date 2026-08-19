@@ -3,8 +3,8 @@ services:
     name: coach-roostoo
     runtime: python
     plan: free
-    # install both dependency files, then build the RAG index from the cards
-    buildCommand: pip install -r requirements.txt -r requirements-rag.txt && python rag.py
+    # install deps, then build the RAG index from the cards
+    buildCommand: pip install -r requirements.txt && python rag.py
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: API_KEY

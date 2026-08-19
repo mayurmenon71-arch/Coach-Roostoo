@@ -1,6 +1,0 @@
-# Dev-only — not needed at runtime, keeps the deployment bundle lean.
-tests/
-evals/
-.claude/
-__pycache__/
-*.pyc
