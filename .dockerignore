@@ -1,0 +1,12 @@
+# Keep the image lean and — critically — keep secrets OUT of it
+.env
+.env.*
+venv/
+chroma_db/
+.git/
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+tests/
+evals/
