@@ -1,35 +1,34 @@
 ---
 id: platform-wallets-payouts
-title: Wallets and payouts — bound wallet, changing it, failed payouts, gas
-tags: wallet, metamask, rabby, coinbase, walletconnect, bound wallet, payout, payout address, change wallet, otp, gas, fees, custody, base, bnb, monad, kyc, failed payout
+title: Wallet and payouts — account, wallet, funding, prizes and withdrawals
+tags: wallet, payout, google sign-in, privy, embedded wallet, connect wallet, metamask, walletconnect, coinbase, self-custodial, fund, deposit, withdraw, usdt, bnb chain, bep-20, bscscan, transactions, fees
 ---
-Roostoo is non-custodial: users sign every transaction from their own EVM wallet
-and Roostoo never holds custody of funds. Any EVM-compatible non-custodial wallet
-works — MetaMask, Rabby, Coinbase Wallet, or WalletConnect-compatible mobile
-wallets. The wallet must be on Base, BNB Chain, or Monad to enroll on that chain
-(USDC on Base and Monad; USDT on BNB Chain). Accounts are Google-Auth verified.
+ACCOUNT. Google is the only sign-in. One Google account is one Roostoo account.
+Protect it: it is the key to your wallet.
 
-BOUND WALLET: the first wallet a user connects becomes their bound wallet, and it
-serves both directions — entry fees are debited from it, and Bonus Pool plus
-Performance Bonus payouts settle back to it automatically. There is no separate
-"payout address" to configure: what you connect with is what you get paid to.
+WALLET. One wallet per account, powered by Privy. There is no wallet-change feature
+yet, so choose deliberately:
+| Option | Best for |
+|---|---|
+| Create an embedded wallet (recommended) | Instant, no seed phrase, no browser extension |
+| Connect an existing wallet | MetaMask, WalletConnect or Coinbase Wallet, if you already keep USDT there |
 
-CHANGING IT: wallet changes require OTP verification on the user's email plus a
-24-hour confirmation delay before the new wallet activates. Any payouts in flight
-during that window settle to the previously bound wallet.
+Roostoo is self-custodial. Your funds stay in your wallet. Roostoo never holds them.
 
-PAYOUT FLOW, via the same audited smart contract that escrowed the entry fees:
-competition closes -> contract calculates rankings on net return -> Bonus Pool
-distributed per the Distribution Schedule -> Performance Bonuses added for
-qualifying Pro/Elite users -> everything settles to bound wallets within 60
-minutes.
+MONEY IN, MONEY OUT:
+| | How |
+|---|---|
+| Fund | Send USDT on BNB Chain (BEP-20). Deployment fees and Real Mode tickets are paid from this balance |
+| Prizes | Settle to the same wallet automatically after each competition |
+| Real Mode P&L | Stays in your venue account until you withdraw it, and only you can sign that |
+| Withdraw | Send funds from your wallet to any address, any time |
 
-FAILED PAYOUTS (bridged contract, frozen address, other settlement failure): the
-contract holds the payout in a recovery escrow and the user is emailed. The user
-has **up to 5 business days** to supply a corrected payout address through the
-resolution flow; after that the funds revert to the platform reserve and are no
-longer claimable.
+PROOF OF EVERYTHING. Your Transactions page is one ledger: every entry, payout,
+deposit and deployment, each row linked to its BscScan transaction.
 
-GAS: Roostoo pays the gas for payout settlement. Users pay only their wallet-side
-gas to confirm the entry transaction (ETH on Base, BNB on BNB Chain, MON on
-Monad) plus the entry fee itself in USDC or USDT.
+WHAT YOU PAY:
+- Deployment fees, per agent, per competition.
+- Network fees on your own transactions.
+- In Real Mode, venue trading fees and a small routing fee.
+
+Coming: more stablecoins and more chains.

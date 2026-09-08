@@ -2,14 +2,16 @@ services:
   - type: web
     name: coach-roostoo
     runtime: python
-    plan: free
-    # install deps, then build the RAG index from the cards
+    plan: standard   # 2 GB RAM — needed for PyTorch + the embedding model (free 512 MB OOMs)
+    # install deps then build the RAG index from cards
     buildCommand: pip install -r requirements.txt && python rag.py
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: API_KEY
-        sync: false   # paste your model API key in the Render dashboard
+        sync: false   # paste your Gemini key in the Render dashboard
+      - key: API_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
       - key: MODEL
-        value: openai/gpt-oss-120b   # Groq model (llama-3.1-8b-instant was retired)
+        value: gemini-flash-lite-latest   # gemini flash-lite (fast, low latency)
       - key: COACH_SERVICE_SECRET
         sync: false   # must match COACH_SERVICE_SECRET in roostoo-power-api
